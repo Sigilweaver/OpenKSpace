@@ -192,3 +192,198 @@ impl ReconStrategy for IfftRss {
         })
     }
 }
+
+// ----------------------------------------------------------------------------
+// GRAPPA
+// ----------------------------------------------------------------------------
+
+use crate::grappa::{detect_pattern, extract_acs_slice, GrappaKernel};
+use ndarray::s;
+use tracing::warn;
+
+/// Parallel-imaging reconstruction via GRAPPA kernel synthesis, followed
+/// by IFFT + RSS coil combine.
+///
+/// Detects the undersampling pattern from the acquisition mask, calibrates
+/// a kernel per slice from the auto-calibration region, synthesizes the
+/// missing lines, and then runs the standard Fourier path.
+///
+/// Falls back to [`IfftRss`] behavior when the data is fully sampled or
+/// the sampling pattern is unsupported.
+#[derive(Debug, Clone, Copy)]
+pub struct GrappaRss {
+    pub remove_oversampling: bool,
+    pub prewhiten: bool,
+    pub phase_correct: bool,
+    pub kernel_ky: usize,
+    pub kernel_kx: usize,
+    pub ridge: f32,
+    pub fft_mode: FftMode,
+    pub crop_to_recon_matrix: bool,
+}
+
+impl Default for GrappaRss {
+    fn default() -> Self {
+        Self {
+            remove_oversampling: true,
+            prewhiten: true,
+            phase_correct: true,
+            kernel_ky: 4,
+            kernel_kx: 5,
+            ridge: 1e-3,
+            fft_mode: FftMode::Auto,
+            crop_to_recon_matrix: true,
+        }
+    }
+}
+
+impl ReconStrategy for GrappaRss {
+    fn name(&self) -> &'static str {
+        "grappa-rss"
+    }
+
+    fn reconstruct(&self, file: &IsmrmrdFile) -> IoResult<ImageVolume> {
+        // --- 1. Calibration pass (same as IfftRss) --------------------------
+        let (whitener, phase_corr) = if self.prewhiten || self.phase_correct {
+            let cal = file.read_calibration()?;
+            let w = if self.prewhiten {
+                NoisePrewhitener::from_noise_acqs(&cal.noise)
+            } else {
+                None
+            };
+            let pc = if self.phase_correct {
+                PhaseCorrector::from_phasecorr_acqs(&cal.phasecorr)
+            } else {
+                PhaseCorrector::default()
+            };
+            (w, pc)
+        } else {
+            (None, PhaseCorrector::default())
+        };
+
+        let os_remover = if self.remove_oversampling {
+            let enc_x = file.header.encoding.encoded_matrix.x as usize;
+            let rec_x = file.header.encoding.recon_matrix.x as usize;
+            let r = OversamplingRemover::new(enc_x, rec_x);
+            if let Some(r) = &r {
+                r.log_summary();
+            }
+            r
+        } else {
+            None
+        };
+
+        // --- 2. Read k-space with sampling mask -----------------------------
+        let (mut kspace, mask) = file.read_kspace_with_mask(|acq| {
+            if let Some(w) = whitener.as_ref() {
+                w.apply(acq);
+            }
+            phase_corr.apply(acq);
+            if let Some(os) = os_remover.as_ref() {
+                os.apply(acq);
+            }
+        })?;
+
+        // --- 3. Detect pattern ----------------------------------------------
+        match detect_pattern(&mask) {
+            None => {
+                info!(
+                    "GRAPPA: data appears fully sampled or pattern unsupported; \
+                     skipping kernel synthesis"
+                );
+            }
+            Some(pattern) => {
+                info!(
+                    "GRAPPA: R={}, ACS ky=[{}, {}) (length {})",
+                    pattern.r,
+                    pattern.acs_start,
+                    pattern.acs_end,
+                    pattern.acs_len()
+                );
+                let nz = kspace.shape()[1];
+                // Calibrate per slice and synthesize.
+                for kz in 0..nz {
+                    let acs = extract_acs_slice(&kspace, kz, &pattern);
+                    match GrappaKernel::calibrate(
+                        acs.view(),
+                        pattern.r,
+                        self.kernel_ky,
+                        self.kernel_kx,
+                        self.ridge,
+                    ) {
+                        Ok(kernel) => {
+                            // Synthesize only on this slice: build a view and
+                            // call synthesize on the full tensor -- it walks
+                            // all slices but only touches those whose ACS
+                            // matches. Simpler: build a per-slice kspace view
+                            // by slicing along axis 1 and call synthesize.
+                            let mut slice_view = kspace.slice_mut(s![.., kz..=kz, .., ..]);
+                            let mut slice_owned = slice_view.to_owned();
+                            kernel.synthesize(&mut slice_owned, &pattern);
+                            slice_view.assign(&slice_owned);
+                        }
+                        Err(e) => {
+                            warn!(
+                                "GRAPPA calibration failed on slice {}: {} \
+                                 -- leaving this slice undersampled",
+                                kz, e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 4. IFFT (2D per-slice or full 3D) ------------------------------
+        let three_d = match self.fft_mode {
+            FftMode::Auto => file.is_3d_encoding()?,
+            FftMode::TwoD => false,
+            FftMode::ThreeD => true,
+        };
+        if three_d {
+            info!("Running 3D IFFT on axes (kz=1, ky=2, kx=3)");
+            ifft3_inplace(&mut kspace, (1, 2, 3));
+        } else {
+            info!("Running 2D IFFT on axes (ky=2, kx=3) for all channels/slices");
+            ifft2_inplace(&mut kspace, (2, 3));
+        }
+
+        // --- 5. RSS coil combine --------------------------------------------
+        info!("RSS coil combine");
+        let mut magnitude = rss_combine_4d(&kspace);
+        drop(kspace);
+
+        // --- 6. Optional crop to the recon matrix ---------------------------
+        if self.crop_to_recon_matrix {
+            let rm = &file.header.encoding.recon_matrix;
+            let (nz, ny, nx) = magnitude.dim();
+            let tz = if (rm.z as usize) >= 2 {
+                (rm.z as usize).min(nz)
+            } else {
+                nz
+            };
+            let ty = if rm.y as usize >= 1 {
+                (rm.y as usize).min(ny)
+            } else {
+                ny
+            };
+            let tx = if rm.x as usize >= 1 {
+                (rm.x as usize).min(nx)
+            } else {
+                nx
+            };
+            if (tz, ty, tx) != (nz, ny, nx) && tx <= nx && ty <= ny && tz <= nz {
+                info!(
+                    "Cropping recon from {}x{}x{} -> {}x{}x{} (recon matrix)",
+                    nz, ny, nx, tz, ty, tx
+                );
+                magnitude = center_crop_3d(&magnitude, (tz, ty, tx));
+            }
+        }
+
+        Ok(ImageVolume {
+            data: magnitude,
+            strategy: self.name(),
+        })
+    }
+}

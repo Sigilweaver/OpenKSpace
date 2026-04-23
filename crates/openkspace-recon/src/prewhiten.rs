@@ -144,7 +144,7 @@ impl NoisePrewhitener {
 /// Cholesky factorization of a Hermitian positive-definite complex matrix.
 /// Returns the lower triangular factor `L` with `A = L * L^H`, or `None` if
 /// the matrix is not positive-definite.
-fn cholesky_lower(a: &Array2<Complex32>) -> Option<Array2<Complex32>> {
+pub(crate) fn cholesky_lower(a: &Array2<Complex32>) -> Option<Array2<Complex32>> {
     let n = a.nrows();
     debug_assert_eq!(a.ncols(), n);
     let mut l = Array2::<Complex32>::zeros((n, n));
@@ -179,7 +179,7 @@ fn cholesky_lower(a: &Array2<Complex32>) -> Option<Array2<Complex32>> {
 
 /// Invert a lower-triangular matrix via forward substitution on each
 /// unit vector column.
-fn invert_lower_triangular(l: &Array2<Complex32>) -> Option<Array2<Complex32>> {
+pub(crate) fn invert_lower_triangular(l: &Array2<Complex32>) -> Option<Array2<Complex32>> {
     let n = l.nrows();
     let mut inv = Array2::<Complex32>::zeros((n, n));
 
