@@ -116,10 +116,8 @@ impl OversamplingRemover {
         let crop_start = (self.encoded_ns - self.recon_ns) / 2;
 
         let mut new_data: Vec<Complex32> = Vec::with_capacity(nc * self.recon_ns);
-        let mut lane_buf: Vec<Complex32> =
-            vec![Complex32::new(0.0, 0.0); self.encoded_ns];
-        let mut cropped: Vec<Complex32> =
-            vec![Complex32::new(0.0, 0.0); self.recon_ns];
+        let mut lane_buf: Vec<Complex32> = vec![Complex32::new(0.0, 0.0); self.encoded_ns];
+        let mut cropped: Vec<Complex32> = vec![Complex32::new(0.0, 0.0); self.recon_ns];
 
         for ch in 0..nc {
             let src = acq.channel(ch);
@@ -282,7 +280,10 @@ mod tests {
         // pass through unchanged.
         let header = zeroed_header(64, 2);
         let data = vec![Complex32::new(1.0, 2.0); 64 * 2];
-        let mut acq = Acquisition { header, data: data.clone() };
+        let mut acq = Acquisition {
+            header,
+            data: data.clone(),
+        };
 
         let remover = OversamplingRemover::new(512, 256).unwrap();
         remover.apply(&mut acq);

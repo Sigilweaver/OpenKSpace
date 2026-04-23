@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use ndarray::{Array2, Axis};
 use openkspace_io::ismrmrd::IsmrmrdFile;
-use openkspace_recon::{FftMode, IfftRss, ReconStrategy};
+use openkspace_recon::{FftMode, GrappaRss, IfftRss, ReconStrategy};
 use std::path::PathBuf;
 use tracing::info;
 
@@ -82,7 +82,31 @@ enum Cmd {
         /// FFT mode: auto (2D/3D from data), 2d, 3d
         #[arg(long, value_enum, default_value_t = FftModeArg::Auto)]
         fft: FftModeArg,
+
+        /// Reconstruction strategy
+        #[arg(long, value_enum, default_value_t = StrategyArg::IfftRss)]
+        strategy: StrategyArg,
+
+        /// GRAPPA: number of source ky rows per kernel (even, >=2)
+        #[arg(long, default_value_t = 4)]
+        grappa_kernel_ky: usize,
+
+        /// GRAPPA: number of kx taps per kernel (odd, >=1)
+        #[arg(long, default_value_t = 5)]
+        grappa_kernel_kx: usize,
+
+        /// GRAPPA: Tikhonov ridge (relative to mean diagonal of A^H A)
+        #[arg(long, default_value_t = 1e-3)]
+        grappa_ridge: f32,
     },
+}
+
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+enum StrategyArg {
+    #[value(name = "ifft-rss")]
+    IfftRss,
+    #[value(name = "grappa")]
+    Grappa,
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
@@ -143,6 +167,10 @@ fn main() -> Result<()> {
             no_phasecorr,
             no_oversampling_removal,
             fft,
+            strategy,
+            grappa_kernel_ky,
+            grappa_kernel_kx,
+            grappa_ridge,
         } => cmd_recon(
             &file,
             &out,
@@ -154,6 +182,10 @@ fn main() -> Result<()> {
             no_phasecorr,
             no_oversampling_removal,
             fft.into(),
+            strategy,
+            grappa_kernel_ky,
+            grappa_kernel_kx,
+            grappa_ridge,
         ),
     }
 }
@@ -318,6 +350,10 @@ fn cmd_recon(
     no_phasecorr: bool,
     no_oversampling_removal: bool,
     fft_mode: FftMode,
+    strategy_arg: StrategyArg,
+    grappa_kernel_ky: usize,
+    grappa_kernel_kx: usize,
+    grappa_ridge: f32,
 ) -> Result<()> {
     if !(0.0..100.0).contains(&pct_low) || !(0.0..=100.0).contains(&pct_high) || pct_high <= pct_low
     {
@@ -332,26 +368,57 @@ fn cmd_recon(
         );
     }
 
-    let strategy = IfftRss {
-        remove_oversampling: !no_oversampling_removal,
-        prewhiten: !no_prewhiten,
-        phase_correct: !no_phasecorr,
-        fft_mode,
-        crop_to_recon_matrix: !no_crop,
+    let volume = match strategy_arg {
+        StrategyArg::IfftRss => {
+            let strategy = IfftRss {
+                remove_oversampling: !no_oversampling_removal,
+                prewhiten: !no_prewhiten,
+                phase_correct: !no_phasecorr,
+                fft_mode,
+                crop_to_recon_matrix: !no_crop,
+            };
+            info!(
+                "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, fft={:?})",
+                strategy.name(),
+                strategy.remove_oversampling,
+                strategy.prewhiten,
+                strategy.phase_correct,
+                strategy.fft_mode,
+            );
+            strategy
+                .reconstruct(&f)
+                .map_err(|e| anyhow::anyhow!("{e}"))
+                .context("reconstruction")?
+        }
+        StrategyArg::Grappa => {
+            let strategy = GrappaRss {
+                remove_oversampling: !no_oversampling_removal,
+                prewhiten: !no_prewhiten,
+                phase_correct: !no_phasecorr,
+                kernel_ky: grappa_kernel_ky,
+                kernel_kx: grappa_kernel_kx,
+                ridge: grappa_ridge,
+                fft_mode,
+                crop_to_recon_matrix: !no_crop,
+            };
+            info!(
+                "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, \
+                 kernel={}x{}, ridge={}, fft={:?})",
+                strategy.name(),
+                strategy.remove_oversampling,
+                strategy.prewhiten,
+                strategy.phase_correct,
+                strategy.kernel_ky,
+                strategy.kernel_kx,
+                strategy.ridge,
+                strategy.fft_mode,
+            );
+            strategy
+                .reconstruct(&f)
+                .map_err(|e| anyhow::anyhow!("{e}"))
+                .context("reconstruction")?
+        }
     };
-    info!(
-        "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, fft={:?})",
-        strategy.name(),
-        strategy.remove_oversampling,
-        strategy.prewhiten,
-        strategy.phase_correct,
-        strategy.fft_mode,
-    );
-
-    let volume = strategy
-        .reconstruct(&f)
-        .map_err(|e| anyhow::anyhow!("{e}"))
-        .context("reconstruction")?;
     let magnitude = volume.data;
 
     std::fs::create_dir_all(out_dir).with_context(|| format!("creating {}", out_dir.display()))?;

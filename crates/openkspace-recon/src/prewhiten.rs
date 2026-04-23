@@ -144,7 +144,7 @@ impl NoisePrewhitener {
 /// Cholesky factorization of a Hermitian positive-definite complex matrix.
 /// Returns the lower triangular factor `L` with `A = L * L^H`, or `None` if
 /// the matrix is not positive-definite.
-fn cholesky_lower(a: &Array2<Complex32>) -> Option<Array2<Complex32>> {
+pub(crate) fn cholesky_lower(a: &Array2<Complex32>) -> Option<Array2<Complex32>> {
     let n = a.nrows();
     debug_assert_eq!(a.ncols(), n);
     let mut l = Array2::<Complex32>::zeros((n, n));
@@ -179,7 +179,7 @@ fn cholesky_lower(a: &Array2<Complex32>) -> Option<Array2<Complex32>> {
 
 /// Invert a lower-triangular matrix via forward substitution on each
 /// unit vector column.
-fn invert_lower_triangular(l: &Array2<Complex32>) -> Option<Array2<Complex32>> {
+pub(crate) fn invert_lower_triangular(l: &Array2<Complex32>) -> Option<Array2<Complex32>> {
     let n = l.nrows();
     let mut inv = Array2::<Complex32>::zeros((n, n));
 
@@ -236,7 +236,9 @@ mod tests {
         // Deterministic CN-ish samples.
         let mut state: u64 = 0xDEAD_BEEF_CAFE_F00D;
         let mut rng = || {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let u = ((state >> 33) as u32) as f32 / u32::MAX as f32;
             u - 0.5
         };
@@ -244,9 +246,7 @@ mod tests {
         // Build the acquisition's data vector [nc*ns] = L * n_0
         let mut data = vec![Complex32::new(0.0, 0.0); nc * ns];
         for n in 0..ns {
-            let n0: Vec<Complex32> = (0..nc)
-                .map(|_| Complex32::new(rng(), rng()))
-                .collect();
+            let n0: Vec<Complex32> = (0..nc).map(|_| Complex32::new(rng(), rng())).collect();
             for i in 0..nc {
                 let mut s = Complex32::new(0.0, 0.0);
                 for j in 0..=i {

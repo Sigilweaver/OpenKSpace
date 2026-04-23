@@ -204,7 +204,23 @@ impl IsmrmrdFile {
     /// per-line transform. Non-image scans (noise, phasecorr, dummy) are
     /// never forwarded to `preprocess` -- if you need those, call
     /// [`read_calibration`](Self::read_calibration) first.
-    pub fn read_kspace_with<F>(&self, mut preprocess: F) -> IoResult<Array4<Complex32>>
+    pub fn read_kspace_with<F>(&self, preprocess: F) -> IoResult<Array4<Complex32>>
+    where
+        F: FnMut(&mut Acquisition),
+    {
+        self.read_kspace_with_mask(preprocess).map(|(k, _m)| k)
+    }
+
+    /// Same as [`read_kspace_with`](Self::read_kspace_with), but also returns
+    /// a per-cell `filled` mask of shape `[kz, ky, kx]`. A cell is `true` iff
+    /// at least one acquisition was placed at that location.
+    ///
+    /// GRAPPA and other parallel-imaging strategies use the mask to detect
+    /// the undersampling pattern and the auto-calibration region.
+    pub fn read_kspace_with_mask<F>(
+        &self,
+        mut preprocess: F,
+    ) -> IoResult<(Array4<Complex32>, ndarray::Array3<bool>)>
     where
         F: FnMut(&mut Acquisition),
     {
@@ -443,6 +459,6 @@ impl IsmrmrdFile {
             "Placed {} acquisitions, skipped {} (of which {} non-image). {} reversed readouts flipped.",
             placed, skipped, n_nonimage, reversed
         );
-        Ok(kspace)
+        Ok((kspace, filled))
     }
 }

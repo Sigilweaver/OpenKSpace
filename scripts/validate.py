@@ -26,7 +26,6 @@ import numpy as np
 from PIL import Image
 from skimage.metrics import structural_similarity as ssim
 
-
 # ISMRMRD AcquisitionFlags (1-based bit positions, mirrored from Rust).
 _FLAG_NOISE = 1 << (19 - 1)
 _FLAG_CALIB = 1 << (20 - 1)
