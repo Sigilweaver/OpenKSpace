@@ -46,6 +46,16 @@ cargo test
 
 The `openkspace` binary is produced at `target/release/openkspace`.
 
+## Validation
+
+A Python harness in [scripts/](scripts/) compares the Rust reconstruction
+against a numpy reference on a per-slice basis using SSIM. See
+[scripts/README.md](scripts/README.md) for details.
+
+```sh
+./scripts/validate.sh path/to/file.h5 --slice 15
+```
+
 ## Citation
 
 If you use Sigil in research, please cite the underlying algorithm paper for
