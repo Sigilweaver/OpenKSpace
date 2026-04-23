@@ -12,6 +12,7 @@
 use crate::coil::rss_combine_4d;
 use crate::crop::center_crop_3d;
 use crate::fft::{ifft2_inplace, ifft3_inplace};
+use crate::oversampling::OversamplingRemover;
 use crate::phasecorr::PhaseCorrector;
 use crate::prewhiten::NoisePrewhitener;
 use ndarray::Array3;
@@ -52,10 +53,11 @@ pub enum FftMode {
 }
 
 /// Classical textbook reconstruction: centred IFFT + RSS coil combine,
-/// optionally preceded by noise pre-whitening and navigator phase
-/// correction.
+/// optionally preceded by readout oversampling removal, noise
+/// pre-whitening, and navigator phase correction.
 #[derive(Debug, Clone, Copy)]
 pub struct IfftRss {
+    pub remove_oversampling: bool,
     pub prewhiten: bool,
     pub phase_correct: bool,
     pub fft_mode: FftMode,
@@ -65,6 +67,7 @@ pub struct IfftRss {
 impl Default for IfftRss {
     fn default() -> Self {
         Self {
+            remove_oversampling: true,
             prewhiten: true,
             phase_correct: true,
             fft_mode: FftMode::Auto,
@@ -104,6 +107,19 @@ impl ReconStrategy for IfftRss {
             info!("Navigator phase correction: enabled");
         }
 
+        // --- 1b. Readout oversampling removal -------------------------------
+        let os_remover = if self.remove_oversampling {
+            let enc_x = file.header.encoding.encoded_matrix.x as usize;
+            let rec_x = file.header.encoding.recon_matrix.x as usize;
+            let r = OversamplingRemover::new(enc_x, rec_x);
+            if let Some(r) = &r {
+                r.log_summary();
+            }
+            r
+        } else {
+            None
+        };
+
         // --- 2. Decide 2D vs 3D ---------------------------------------------
         let three_d = match self.fft_mode {
             FftMode::Auto => file.is_3d_encoding()?,
@@ -121,6 +137,9 @@ impl ReconStrategy for IfftRss {
                 w.apply(acq);
             }
             phase_corr.apply(acq);
+            if let Some(os) = os_remover.as_ref() {
+                os.apply(acq);
+            }
         })?;
 
         // --- 4. Centred inverse FFT -----------------------------------------

@@ -14,6 +14,7 @@
 pub mod coil;
 pub mod crop;
 pub mod fft;
+pub mod oversampling;
 pub mod phasecorr;
 pub mod prewhiten;
 pub mod shift;
@@ -22,6 +23,7 @@ pub mod strategy;
 pub use coil::rss_combine;
 pub use crop::center_crop_3d;
 pub use fft::{ifft2_inplace, ifft3_inplace};
+pub use oversampling::OversamplingRemover;
 pub use phasecorr::PhaseCorrector;
 pub use prewhiten::NoisePrewhitener;
 pub use shift::{fftshift_axis, ifftshift_axis};
