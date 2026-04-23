@@ -1,0 +1,50 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/openkspace-io",
+    "crates/openkspace-recon",
+    "crates/openkspace-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/Sigilweaver/OpenKSpace"
+rust-version = "1.75"
+
+[workspace.dependencies]
+# Core numerics
+ndarray = { version = "0.15", features = ["rayon"] }
+num-complex = "0.4"
+rustfft = "6.2"
+
+# HDF5 / ISMRMRD
+hdf5-metno = { version = "0.9", features = ["blosc"] }
+
+# XML header
+quick-xml = { version = "0.36", features = ["serialize"] }
+serde = { version = "1", features = ["derive"] }
+
+# Parallelism / IO
+rayon = "1.10"
+memmap2 = "0.9"
+
+# CLI / logging / errors
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Image output
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# Workspace-internal crates
+openkspace-io = { path = "crates/openkspace-io" }
+openkspace-recon = { path = "crates/openkspace-recon" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

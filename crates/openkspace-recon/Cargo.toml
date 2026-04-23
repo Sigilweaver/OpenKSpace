@@ -1,0 +1,16 @@
+[package]
+name = "openkspace-recon"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+description = "K-space -> image reconstruction: IFFT, coil combination, corrections."
+
+[dependencies]
+openkspace-io = { workspace = true }
+ndarray = { workspace = true }
+num-complex = { workspace = true }
+rustfft = { workspace = true }
+rayon = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

@@ -1,0 +1,40 @@
+# Build & debug
+/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Local scratch (notes, throwaway scripts, captured tool output)
+.untracked/
+
+# Large binary corpus & derived outputs
+corpus/
+recon_out/
+*.h5
+*.dat
+*.7
+*.raw
+*.lab
+*.sin
+*.nii
+*.nii.gz
+
+# Local HTML snapshots / catalogs pulled during dev
+*.html
+mridata.org.html
+full-mridata.org.html
+download_corpus.py
+parse_catalog.py
+
+# Python venvs that uv might leave around
+.venv/
+__pycache__/
+*.pyc
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Memory / logs
+*.log

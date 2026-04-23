@@ -1,0 +1,17 @@
+[package]
+name = "openkspace-io"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+description = "Readers for MRI raw k-space formats: ISMRMRD (HDF5), Siemens TWIX, GE P-file."
+
+[dependencies]
+hdf5-metno = { workspace = true }
+ndarray = { workspace = true }
+num-complex = { workspace = true }
+quick-xml = { workspace = true }
+serde = { workspace = true }
+memmap2 = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
