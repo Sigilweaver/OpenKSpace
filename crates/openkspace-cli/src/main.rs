@@ -74,6 +74,11 @@ enum Cmd {
         #[arg(long)]
         no_phasecorr: bool,
 
+        /// Disable readout oversampling removal
+        /// (on by default when encoded_x > recon_x)
+        #[arg(long)]
+        no_oversampling_removal: bool,
+
         /// FFT mode: auto (2D/3D from data), 2d, 3d
         #[arg(long, value_enum, default_value_t = FftModeArg::Auto)]
         fft: FftModeArg,
@@ -136,6 +141,7 @@ fn main() -> Result<()> {
             no_crop,
             no_prewhiten,
             no_phasecorr,
+            no_oversampling_removal,
             fft,
         } => cmd_recon(
             &file,
@@ -146,6 +152,7 @@ fn main() -> Result<()> {
             no_crop,
             no_prewhiten,
             no_phasecorr,
+            no_oversampling_removal,
             fft.into(),
         ),
     }
@@ -309,6 +316,7 @@ fn cmd_recon(
     no_crop: bool,
     no_prewhiten: bool,
     no_phasecorr: bool,
+    no_oversampling_removal: bool,
     fft_mode: FftMode,
 ) -> Result<()> {
     if !(0.0..100.0).contains(&pct_low) || !(0.0..=100.0).contains(&pct_high) || pct_high <= pct_low
@@ -325,14 +333,16 @@ fn cmd_recon(
     }
 
     let strategy = IfftRss {
+        remove_oversampling: !no_oversampling_removal,
         prewhiten: !no_prewhiten,
         phase_correct: !no_phasecorr,
         fft_mode,
         crop_to_recon_matrix: !no_crop,
     };
     info!(
-        "Strategy: {} (prewhiten={}, phasecorr={}, fft={:?})",
+        "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, fft={:?})",
         strategy.name(),
+        strategy.remove_oversampling,
         strategy.prewhiten,
         strategy.phase_correct,
         strategy.fft_mode,
