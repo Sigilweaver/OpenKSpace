@@ -31,7 +31,7 @@ pub use coil::rss_combine;
 pub use crop::center_crop_3d;
 pub use cs::fista_cs_single_coil;
 pub use espirit::espirit_sensitivity_maps;
-pub use fft::{ifft2_inplace, ifft3_inplace};
+pub use fft::{ifft1_inplace, ifft2_inplace, ifft3_inplace};
 pub use grappa::{GrappaKernel, SamplingPattern};
 pub use oversampling::OversamplingRemover;
 pub use partial_fourier::{homodyne_reconstruct, PartialFourierPlan};
