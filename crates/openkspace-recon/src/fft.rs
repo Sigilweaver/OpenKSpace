@@ -44,6 +44,17 @@ pub fn ifft3_inplace<D: Dimension>(a: &mut Array<Complex32, D>, axes: (usize, us
     fftshift_axis(a, a3);
 }
 
+/// Centred 1-D IFFT along a single axis: ifftshift -> IFFT -> fftshift.
+///
+/// Used to decouple a 3-D acquisition along its fully-sampled partition
+/// axis (kz) before applying a 2-D parallel-imaging reconstruction on
+/// each resulting z-slice.
+pub fn ifft1_inplace<D: Dimension>(a: &mut Array<Complex32, D>, axis: usize) {
+    ifftshift_axis(a, axis);
+    ifft_axis(a.view_mut(), axis);
+    fftshift_axis(a, axis);
+}
+
 /// 1-D inverse FFT along one axis, normalized by `1/n`.
 fn ifft_axis<D: Dimension>(mut a: ArrayViewMut<Complex32, D>, axis: usize) {
     let n = a.len_of(Axis(axis));
@@ -143,6 +154,40 @@ mod tests {
                 expected,
                 v.norm()
             );
+        }
+    }
+
+    #[test]
+    fn ifft1_decouples_from_2d() {
+        // A 3-D k-space that is the outer product of independent kz and
+        // (ky,kx) structure should satisfy:
+        //     ifft3(k)  ==  ifft2_axes23( ifft1_axis1(k) )
+        use ndarray::Array3;
+        let (nz, ny, nx) = (4, 6, 6);
+        let mut k_full: Array3<Complex32> = Array3::zeros((nz, ny, nx));
+        for z in 0..nz {
+            for y in 0..ny {
+                for x in 0..nx {
+                    let a = Complex32::new((z as f32 + 1.0) * 0.5, 0.0);
+                    let b = Complex32::new(y as f32 - 2.0, (x as f32) * 0.25);
+                    k_full[[z, y, x]] = a * b;
+                }
+            }
+        }
+        let mut a = k_full.clone();
+        ifft3_inplace(&mut a, (0, 1, 2));
+
+        let mut b = k_full.clone();
+        ifft1_inplace(&mut b, 0);
+        ifft2_inplace(&mut b, (1, 2));
+
+        for z in 0..nz {
+            for y in 0..ny {
+                for x in 0..nx {
+                    let err = (a[[z, y, x]] - b[[z, y, x]]).norm();
+                    assert!(err < 1e-4, "decouple mismatch at ({z},{y},{x}): {err}");
+                }
+            }
         }
     }
 }

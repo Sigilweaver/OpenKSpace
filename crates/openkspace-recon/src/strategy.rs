@@ -547,20 +547,25 @@ impl ReconStrategy for SenseRss {
             FftMode::ThreeD => true,
         };
 
+        // For 3-D encodings with undersampling along ky only, decouple
+        // the kz axis first: a centred 1-D IFFT along kz makes every
+        // resulting z-slice an independent 2-D SENSE problem. This is
+        // exact when the kz axis is fully sampled (which is the
+        // common clinical case for 3-D parallel imaging).
+        if three_d {
+            info!("SENSE: 3D encoding; decoupling kz via 1-D IFFT");
+            crate::fft::ifft1_inplace(&mut kspace, 1);
+        }
+
         // --- 3. Detect pattern; bail to IFFT+RSS on unsupported cases ------
-        let pattern_opt = if three_d { None } else { detect_pattern(&mask) };
+        let pattern_opt = detect_pattern(&mask);
 
         let Some(pattern) = pattern_opt else {
-            if three_d {
-                info!("SENSE: 3D data detected; falling back to plain IFFT+RSS");
-                ifft3_inplace(&mut kspace, (1, 2, 3));
-            } else {
-                info!(
-                    "SENSE: data appears fully sampled or pattern unsupported; \
-                     falling back to plain IFFT+RSS"
-                );
-                ifft2_inplace(&mut kspace, (2, 3));
-            }
+            info!(
+                "SENSE: data appears fully sampled or pattern unsupported; \
+                 falling back to plain IFFT+RSS"
+            );
+            ifft2_inplace(&mut kspace, (2, 3));
             let mut magnitude = rss_combine_4d(&kspace);
             drop(kspace);
             if self.crop_to_recon_matrix {
@@ -737,7 +742,7 @@ impl ReconStrategy for CsRss {
             None
         };
 
-        let (kspace, mask) = file.read_kspace_with_mask(|acq| {
+        let (mut kspace, mask) = file.read_kspace_with_mask(|acq| {
             if let Some(w) = whitener.as_ref() {
                 w.apply(acq);
             }
@@ -752,15 +757,17 @@ impl ReconStrategy for CsRss {
             FftMode::TwoD => false,
             FftMode::ThreeD => true,
         };
+        // Decouple a 3-D acquisition by a 1-D IFFT along kz: each
+        // resulting z-slice becomes an independent 2-D CS problem.
+        if three_d {
+            info!("CS: 3D encoding; decoupling kz via 1-D IFFT");
+            crate::fft::ifft1_inplace(&mut kspace, 1);
+        }
         let (nc, nz, ny, nx) = kspace.dim();
-        if three_d || ny % 2 != 0 || nx % 2 != 0 {
-            info!("CS: 3D or odd dims -- falling back to plain IFFT+RSS");
+        if ny % 2 != 0 || nx % 2 != 0 {
+            info!("CS: odd spatial dims -- falling back to plain IFFT+RSS");
             let mut k = kspace;
-            if three_d {
-                ifft3_inplace(&mut k, (1, 2, 3));
-            } else {
-                ifft2_inplace(&mut k, (2, 3));
-            }
+            ifft2_inplace(&mut k, (2, 3));
             let mut magnitude = rss_combine_4d(&k);
             if self.crop_to_recon_matrix {
                 magnitude = IfftRss::default().maybe_crop(magnitude, file);
