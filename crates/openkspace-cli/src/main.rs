@@ -12,7 +12,7 @@ use openkspace_recon::{
     CsRss, FftMode, GrappaRss, IfftRss, ReconStrategy, SenseMapSource, SenseRss,
 };
 use std::path::PathBuf;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -134,6 +134,15 @@ enum Cmd {
         #[arg(long, default_value_t = 1e-4)]
         sense_ridge: f32,
 
+        /// SENSE: also compute the g-factor map (requires --write-gfactor
+        /// to emit images; cheap to enable either way)
+        #[arg(long, default_value_t = false)]
+        sense_gfactor: bool,
+
+        /// Write g-factor PNGs (requires SENSE with --sense-gfactor)
+        #[arg(long, default_value_t = false)]
+        write_gfactor: bool,
+
         /// CS: number of FISTA iterations
         #[arg(long, default_value_t = 60)]
         cs_iters: usize,
@@ -241,6 +250,8 @@ fn main() -> Result<()> {
             espirit_threshold,
             espirit_iters,
             sense_ridge,
+            sense_gfactor,
+            write_gfactor,
             cs_iters,
             cs_lambda,
         } => cmd_recon(
@@ -266,6 +277,8 @@ fn main() -> Result<()> {
             espirit_threshold,
             espirit_iters,
             sense_ridge,
+            sense_gfactor,
+            write_gfactor,
             cs_iters,
             cs_lambda,
         ),
@@ -444,6 +457,8 @@ fn cmd_recon(
     espirit_threshold: f32,
     espirit_iters: usize,
     sense_ridge: f32,
+    sense_gfactor: bool,
+    write_gfactor: bool,
     cs_iters: usize,
     cs_lambda: f32,
 ) -> Result<()> {
@@ -524,6 +539,7 @@ fn cmd_recon(
                 espirit_threshold,
                 espirit_iters,
                 ridge: sense_ridge,
+                compute_gfactor: sense_gfactor || write_gfactor,
                 fft_mode,
                 crop_to_recon_matrix: !no_crop,
             };
@@ -571,6 +587,7 @@ fn cmd_recon(
         }
     };
     let magnitude = volume.data;
+    let gfactor = volume.gfactor;
 
     std::fs::create_dir_all(out_dir).with_context(|| format!("creating {}", out_dir.display()))?;
 
@@ -614,8 +631,48 @@ fn cmd_recon(
         write_png_windowed(&slice, &png_path, pct_low, pct_high)
             .with_context(|| format!("writing {}", png_path.display()))?;
         info!("Wrote {}", png_path.display());
+
+        if write_gfactor {
+            match gfactor.as_ref() {
+                Some(gv) => {
+                    let gslice: Array2<f32> = gv.index_axis(Axis(0), iz).to_owned();
+                    let gpath = out_dir.join(format!("{stem}_gfactor_slice_{iz:04}.png"));
+                    // Window g-factor to [1, max(2, p99)] for visibility.
+                    let mut sorted: Vec<f32> = gslice.iter().copied().collect();
+                    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                    let hi = percentile(&sorted, 99.0).max(2.0);
+                    write_png_linear(&gslice, &gpath, 1.0, hi)
+                        .with_context(|| format!("writing {}", gpath.display()))?;
+                    info!(
+                        "Wrote {} (g-factor, window [1.0, {:.2}])",
+                        gpath.display(),
+                        hi
+                    );
+                }
+                None => {
+                    warn!("--write-gfactor requested but strategy produced no g-factor map");
+                }
+            }
+        }
     }
 
+    Ok(())
+}
+
+/// Write a 2D f32 array to PNG with a fixed linear window `[lo, hi]`.
+fn write_png_linear(img: &Array2<f32>, path: &std::path::Path, lo: f32, hi: f32) -> Result<()> {
+    let (h, w) = img.dim();
+    let hi = hi.max(lo + f32::EPSILON);
+    let mut buf = vec![0u8; h * w];
+    for y in 0..h {
+        for x in 0..w {
+            let v = img[[y, x]];
+            let norm = ((v - lo) / (hi - lo)).clamp(0.0, 1.0);
+            let byte = (norm * 255.0).round() as u8;
+            buf[slice_index(w, h, y, x)] = byte;
+        }
+    }
+    image::save_buffer(path, &buf, w as u32, h as u32, image::ColorType::L8)?;
     Ok(())
 }
 

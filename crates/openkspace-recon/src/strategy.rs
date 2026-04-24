@@ -28,6 +28,20 @@ pub struct ImageVolume {
     pub data: Array3<f32>,
     /// Name of the strategy that produced this volume (for logging).
     pub strategy: &'static str,
+    /// Optional SENSE g-factor map, same shape as `data`, populated
+    /// when the strategy supports it and the caller requested it.
+    pub gfactor: Option<Array3<f32>>,
+}
+
+impl ImageVolume {
+    /// Convenience constructor: creates a volume without a g-factor map.
+    pub fn new(data: Array3<f32>, strategy: &'static str) -> Self {
+        Self {
+            data,
+            strategy,
+            gfactor: None,
+        }
+    }
 }
 
 /// Reconstruction strategy: k-space -> magnitude image.
@@ -155,6 +169,7 @@ impl ReconStrategy for IfftRss {
                 return Ok(ImageVolume {
                     data: magnitude,
                     strategy: self.name(),
+                    gfactor: None,
                 });
             }
         }
@@ -191,6 +206,7 @@ impl ReconStrategy for IfftRss {
         Ok(ImageVolume {
             data: magnitude,
             strategy: self.name(),
+            gfactor: None,
         })
     }
 }
@@ -416,6 +432,7 @@ impl ReconStrategy for GrappaRss {
         Ok(ImageVolume {
             data: magnitude,
             strategy: self.name(),
+            gfactor: None,
         })
     }
 }
@@ -472,6 +489,9 @@ pub struct SenseRss {
     pub espirit_iters: usize,
     /// Tikhonov ridge added to `C^H C` in the SENSE normal equations.
     pub ridge: f32,
+    /// If true, compute the SENSE g-factor map alongside the unfolded
+    /// image and return it on [`ImageVolume::gfactor`].
+    pub compute_gfactor: bool,
     pub fft_mode: FftMode,
     pub crop_to_recon_matrix: bool,
 }
@@ -489,6 +509,7 @@ impl Default for SenseRss {
             espirit_threshold: 0.02,
             espirit_iters: 30,
             ridge: 1e-4,
+            compute_gfactor: false,
             fft_mode: FftMode::Auto,
             crop_to_recon_matrix: true,
         }
@@ -574,6 +595,7 @@ impl ReconStrategy for SenseRss {
             return Ok(ImageVolume {
                 data: magnitude,
                 strategy: self.name(),
+                gfactor: None,
             });
         };
 
@@ -602,11 +624,17 @@ impl ReconStrategy for SenseRss {
             return Ok(ImageVolume {
                 data: magnitude,
                 strategy: self.name(),
+                gfactor: None,
             });
         }
 
         // --- 4. Per-slice: sensitivity maps from ACS, then SENSE unfold ----
         let mut output = Array3::<f32>::zeros((nz, ny, nx));
+        let mut gfactor_vol = if self.compute_gfactor {
+            Some(Array3::<f32>::zeros((nz, ny, nx)))
+        } else {
+            None
+        };
         for kz in 0..nz {
             let maps = match self.map_source {
                 SenseMapSource::Walsh => {
@@ -657,17 +685,30 @@ impl ReconStrategy for SenseRss {
                     output[[kz, y, x]] = unfolded[[y, x]].norm();
                 }
             }
+            if let Some(gv) = gfactor_vol.as_mut() {
+                let gslice = crate::sense::sense_gfactor_1d(&maps, pattern.r, self.ridge);
+                for y in 0..ny {
+                    for x in 0..nx {
+                        gv[[kz, y, x]] = gslice[[y, x]];
+                    }
+                }
+            }
         }
         drop(kspace);
 
         let mut magnitude = output;
         if self.crop_to_recon_matrix {
             magnitude = IfftRss::default().maybe_crop(magnitude, file);
+            if let Some(gv) = gfactor_vol.as_mut() {
+                let cropped = IfftRss::default().maybe_crop(gv.clone(), file);
+                *gv = cropped;
+            }
         }
 
         Ok(ImageVolume {
             data: magnitude,
             strategy: self.name(),
+            gfactor: gfactor_vol,
         })
     }
 }
@@ -775,6 +816,7 @@ impl ReconStrategy for CsRss {
             return Ok(ImageVolume {
                 data: magnitude,
                 strategy: self.name(),
+                gfactor: None,
             });
         }
 
@@ -821,6 +863,7 @@ impl ReconStrategy for CsRss {
         Ok(ImageVolume {
             data: magnitude,
             strategy: self.name(),
+            gfactor: None,
         })
     }
 }
