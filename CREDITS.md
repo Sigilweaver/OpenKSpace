@@ -37,6 +37,11 @@ not implementations.
 - *Pruessmann KP et al.* "SENSE: sensitivity encoding for fast MRI."
   **MRM** 42(5):952–962, 1999. — reference for image-domain unfolding.
 
+- *Walsh DO, Gmitro AF, Marcellin MW.* "Adaptive reconstruction of
+  phased array MR imagery." **MRM** 43(5):682–690, 2000. — reference
+  for the iterative-eigenvector method used by our Walsh
+  sensitivity-map estimator.
+
 - *Uecker M et al.* "ESPIRiT — an eigenvalue approach to autocalibrating
   parallel MRI." **MRM** 71(3):990–1001, 2014. — reference for coil sensitivity
   maps.

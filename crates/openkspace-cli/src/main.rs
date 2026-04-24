@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use ndarray::{Array2, Axis};
 use openkspace_io::ismrmrd::IsmrmrdFile;
-use openkspace_recon::{FftMode, GrappaRss, IfftRss, ReconStrategy};
+use openkspace_recon::{FftMode, GrappaRss, IfftRss, ReconStrategy, SenseRss};
 use std::path::PathBuf;
 use tracing::info;
 
@@ -103,6 +103,18 @@ enum Cmd {
         /// GRAPPA: Tikhonov ridge (relative to mean diagonal of A^H A)
         #[arg(long, default_value_t = 1e-3)]
         grappa_ridge: f32,
+
+        /// SENSE: half-size (in voxels) of the Walsh covariance window
+        #[arg(long, default_value_t = 3)]
+        sense_walsh_window: usize,
+
+        /// SENSE: number of Walsh power-iteration steps per voxel
+        #[arg(long, default_value_t = 6)]
+        sense_walsh_iters: usize,
+
+        /// SENSE: Tikhonov ridge added to C^H C in the unfolding solve
+        #[arg(long, default_value_t = 1e-4)]
+        sense_ridge: f32,
     },
 }
 
@@ -112,6 +124,8 @@ enum StrategyArg {
     IfftRss,
     #[value(name = "grappa")]
     Grappa,
+    #[value(name = "sense")]
+    Sense,
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
@@ -177,6 +191,9 @@ fn main() -> Result<()> {
             grappa_kernel_ky,
             grappa_kernel_kx,
             grappa_ridge,
+            sense_walsh_window,
+            sense_walsh_iters,
+            sense_ridge,
         } => cmd_recon(
             &file,
             &out,
@@ -193,6 +210,9 @@ fn main() -> Result<()> {
             grappa_kernel_ky,
             grappa_kernel_kx,
             grappa_ridge,
+            sense_walsh_window,
+            sense_walsh_iters,
+            sense_ridge,
         ),
     }
 }
@@ -362,6 +382,9 @@ fn cmd_recon(
     grappa_kernel_ky: usize,
     grappa_kernel_kx: usize,
     grappa_ridge: f32,
+    sense_walsh_window: usize,
+    sense_walsh_iters: usize,
+    sense_ridge: f32,
 ) -> Result<()> {
     if !(0.0..100.0).contains(&pct_low) || !(0.0..=100.0).contains(&pct_high) || pct_high <= pct_low
     {
@@ -420,6 +443,34 @@ fn cmd_recon(
                 strategy.phase_correct,
                 strategy.kernel_ky,
                 strategy.kernel_kx,
+                strategy.ridge,
+                strategy.fft_mode,
+            );
+            strategy
+                .reconstruct(&f)
+                .map_err(|e| anyhow::anyhow!("{e}"))
+                .context("reconstruction")?
+        }
+        StrategyArg::Sense => {
+            let strategy = SenseRss {
+                remove_oversampling: !no_oversampling_removal,
+                prewhiten: !no_prewhiten,
+                phase_correct: !no_phasecorr,
+                walsh_window: sense_walsh_window,
+                walsh_iters: sense_walsh_iters,
+                ridge: sense_ridge,
+                fft_mode,
+                crop_to_recon_matrix: !no_crop,
+            };
+            info!(
+                "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, \
+                 walsh_window={}, walsh_iters={}, ridge={}, fft={:?})",
+                strategy.name(),
+                strategy.remove_oversampling,
+                strategy.prewhiten,
+                strategy.phase_correct,
+                strategy.walsh_window,
+                strategy.walsh_iters,
                 strategy.ridge,
                 strategy.fft_mode,
             );
