@@ -182,8 +182,7 @@ mod tests {
                 for x in 0..nx {
                     let s = if c == 0 { s1[[y, x]] } else { s2[[y, x]] };
                     let m = s * phantom[[y, x]];
-                    coil[[c, y, x]] =
-                        Complex32::new(m * phase[c].cos(), m * phase[c].sin());
+                    coil[[c, y, x]] = Complex32::new(m * phase[c].cos(), m * phase[c].sin());
                 }
             }
         }

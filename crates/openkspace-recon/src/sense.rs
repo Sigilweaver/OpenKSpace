@@ -54,8 +54,17 @@ pub fn sense_unfold_1d(
 ) -> Array2<Complex32> {
     let (nc, ny, nx) = aliased.dim();
     assert!(r >= 1, "SENSE: acceleration factor must be >= 1");
-    assert_eq!(maps.dim(), (nc, ny, nx), "SENSE: map/aliased shape mismatch");
-    assert!(ny % r == 0, "SENSE: Ny ({}) must be divisible by R ({})", ny, r);
+    assert_eq!(
+        maps.dim(),
+        (nc, ny, nx),
+        "SENSE: map/aliased shape mismatch"
+    );
+    assert!(
+        ny % r == 0,
+        "SENSE: Ny ({}) must be divisible by R ({})",
+        ny,
+        r
+    );
     let ny_red = ny / r;
 
     let mut out = Array2::<Complex32>::zeros((ny, nx));
@@ -168,12 +177,7 @@ mod tests {
 
         // 2. Four gaussian coil sensitivities located at 4 corners.
         let mut maps = Array3::<Complex32>::zeros((nc, ny, nx));
-        let centres = [
-            (0.25, 0.25),
-            (0.25, 0.75),
-            (0.75, 0.25),
-            (0.75, 0.75),
-        ];
+        let centres = [(0.25, 0.25), (0.25, 0.75), (0.75, 0.25), (0.75, 0.75)];
         for (c, (fy, fx)) in centres.iter().enumerate() {
             let cy = fy * ny as f32;
             let cx = fx * nx as f32;
@@ -231,12 +235,14 @@ mod tests {
         // Sanity: the aliased image should be periodic along y.
         let err: f32 = (0..nc)
             .flat_map(|c| (0..nx).map(move |x| (c, x)))
-            .map(|(c, x)| {
-                (aliased[[c, 0, x]] - aliased[[c, ny / r, x]]).norm_sqr()
-            })
+            .map(|(c, x)| (aliased[[c, 0, x]] - aliased[[c, ny / r, x]]).norm_sqr())
             .sum::<f32>()
             .sqrt();
-        assert!(err < 1e-3, "aliased image should be ny/r-periodic, err={}", err);
+        assert!(
+            err < 1e-3,
+            "aliased image should be ny/r-periodic, err={}",
+            err
+        );
 
         // 5. SENSE unfold.
         let out = sense_unfold_1d(&aliased, &maps, r, 1e-5);

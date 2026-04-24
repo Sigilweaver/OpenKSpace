@@ -212,12 +212,12 @@ def validate_one(
     }
     try:
         if verbose:
-            print(f"  reference recon (numpy) ...", flush=True)
+            print("  reference recon (numpy) ...", flush=True)
         ref = ref_recon(h5_path, slice_idx)
         ref_w = apply_window(ref, pct_low, pct_high)
 
         if verbose:
-            print(f"  openkspace recon (Rust) ...", flush=True)
+            print("  openkspace recon (Rust) ...", flush=True)
         with tempfile.TemporaryDirectory() as td:
             ours = run_openkspace(binary, h5_path, slice_idx, td)
 
@@ -262,7 +262,9 @@ def _format_summary(results: list[dict], threshold: float) -> str:
     lines: list[str] = []
     name_w = max((len(os.path.basename(r["file"])) for r in results), default=4)
     name_w = max(name_w, 20)
-    header = f"{'file':<{name_w}}  {'slice':>5}  {'ssim':>7}  {'status':>6}  {'time':>7}"
+    header = (
+        f"{'file':<{name_w}}  {'slice':>5}  {'ssim':>7}  {'status':>6}  {'time':>7}"
+    )
     lines.append(header)
     lines.append("-" * len(header))
     for r in results:
@@ -374,9 +376,7 @@ def main() -> int:
 
     if args.report:
         with open(args.report, "w") as f:
-            json.dump(
-                {"threshold": args.threshold, "results": results}, f, indent=2
-            )
+            json.dump({"threshold": args.threshold, "results": results}, f, indent=2)
         print(f"wrote JSON report to {args.report}")
 
     # Exit non-zero on any FAIL or ERROR.
