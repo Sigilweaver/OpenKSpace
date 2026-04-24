@@ -19,6 +19,8 @@ pub mod oversampling;
 pub mod partial_fourier;
 pub mod phasecorr;
 pub mod prewhiten;
+pub mod sense;
+pub mod sensitivity;
 pub mod shift;
 pub mod strategy;
 
@@ -30,5 +32,7 @@ pub use oversampling::OversamplingRemover;
 pub use partial_fourier::{homodyne_reconstruct, PartialFourierPlan};
 pub use phasecorr::PhaseCorrector;
 pub use prewhiten::NoisePrewhitener;
+pub use sense::sense_unfold_1d;
+pub use sensitivity::walsh_sensitivity_maps;
 pub use shift::{fftshift_axis, ifftshift_axis};
-pub use strategy::{FftMode, GrappaRss, IfftRss, ImageVolume, ReconStrategy};
+pub use strategy::{FftMode, GrappaRss, IfftRss, ImageVolume, ReconStrategy, SenseRss};

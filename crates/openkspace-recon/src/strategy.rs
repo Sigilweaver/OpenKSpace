@@ -419,3 +419,207 @@ impl ReconStrategy for GrappaRss {
         })
     }
 }
+
+// ----------------------------------------------------------------------------
+// SENSE
+// ----------------------------------------------------------------------------
+
+use crate::sense::sense_unfold_1d;
+use crate::sensitivity::walsh_sensitivity_maps;
+use ndarray::{Array4, Axis};
+use num_complex::Complex32;
+
+/// Parallel-imaging reconstruction via SENSE with Walsh sensitivity maps.
+///
+/// Detects a regular 1-D Cartesian undersampling pattern along ky (same
+/// pattern recognised by [`GrappaRss`]), estimates full-FOV coil
+/// sensitivity maps from the ACS block via the Walsh adaptive method,
+/// and unfolds the aliased coil images by solving a small least-squares
+/// system at every voxel in the reduced FOV.
+///
+/// References (credited in `CREDITS.md`, no code copied):
+/// * Pruessmann, Weiger, Scheidegger, Boesiger, *MRM* 42(5), 1999 -- SENSE.
+/// * Walsh, Gmitro, Marcellin, *MRM* 43(5), 2000 -- adaptive maps.
+///
+/// Falls back to plain IFFT+RSS when the pattern is fully sampled or
+/// unsupported (no ACS, non-integer acceleration, 3-D encoding).
+#[derive(Debug, Clone, Copy)]
+pub struct SenseRss {
+    pub remove_oversampling: bool,
+    pub prewhiten: bool,
+    pub phase_correct: bool,
+    /// Half-size of the Walsh covariance window (voxels).
+    pub walsh_window: usize,
+    /// Number of Walsh power-iteration steps per voxel.
+    pub walsh_iters: usize,
+    /// Tikhonov ridge added to `C^H C` in the SENSE normal equations.
+    pub ridge: f32,
+    pub fft_mode: FftMode,
+    pub crop_to_recon_matrix: bool,
+}
+
+impl Default for SenseRss {
+    fn default() -> Self {
+        Self {
+            remove_oversampling: true,
+            prewhiten: true,
+            phase_correct: true,
+            walsh_window: 3,
+            walsh_iters: 6,
+            ridge: 1e-4,
+            fft_mode: FftMode::Auto,
+            crop_to_recon_matrix: true,
+        }
+    }
+}
+
+impl ReconStrategy for SenseRss {
+    fn name(&self) -> &'static str {
+        "sense"
+    }
+
+    fn reconstruct(&self, file: &IsmrmrdFile) -> IoResult<ImageVolume> {
+        // --- 1. Calibration (same as IfftRss) -------------------------------
+        let (whitener, phase_corr) = if self.prewhiten || self.phase_correct {
+            let cal = file.read_calibration()?;
+            let w = if self.prewhiten {
+                NoisePrewhitener::from_noise_acqs(&cal.noise)
+            } else {
+                None
+            };
+            let pc = if self.phase_correct {
+                PhaseCorrector::from_phasecorr_acqs(&cal.phasecorr)
+            } else {
+                PhaseCorrector::default()
+            };
+            (w, pc)
+        } else {
+            (None, PhaseCorrector::default())
+        };
+        let os_remover = if self.remove_oversampling {
+            let enc_x = file.header.encoding.encoded_matrix.x as usize;
+            let rec_x = file.header.encoding.recon_matrix.x as usize;
+            let r = OversamplingRemover::new(enc_x, rec_x);
+            if let Some(r) = &r {
+                r.log_summary();
+            }
+            r
+        } else {
+            None
+        };
+
+        // --- 2. Read k-space with sampling mask -----------------------------
+        let (mut kspace, mask) = file.read_kspace_with_mask(|acq| {
+            if let Some(w) = whitener.as_ref() {
+                w.apply(acq);
+            }
+            phase_corr.apply(acq);
+            if let Some(os) = os_remover.as_ref() {
+                os.apply(acq);
+            }
+        })?;
+
+        let three_d = match self.fft_mode {
+            FftMode::Auto => file.is_3d_encoding()?,
+            FftMode::TwoD => false,
+            FftMode::ThreeD => true,
+        };
+
+        // --- 3. Detect pattern; bail to IFFT+RSS on unsupported cases ------
+        let pattern_opt = if three_d { None } else { detect_pattern(&mask) };
+
+        let Some(pattern) = pattern_opt else {
+            if three_d {
+                info!("SENSE: 3D data detected; falling back to plain IFFT+RSS");
+                ifft3_inplace(&mut kspace, (1, 2, 3));
+            } else {
+                info!(
+                    "SENSE: data appears fully sampled or pattern unsupported; \
+                     falling back to plain IFFT+RSS"
+                );
+                ifft2_inplace(&mut kspace, (2, 3));
+            }
+            let mut magnitude = rss_combine_4d(&kspace);
+            drop(kspace);
+            if self.crop_to_recon_matrix {
+                magnitude = IfftRss::default().maybe_crop(magnitude, file);
+            }
+            return Ok(ImageVolume {
+                data: magnitude,
+                strategy: self.name(),
+            });
+        };
+
+        info!(
+            "SENSE: R={}, ACS ky=[{}, {}) (length {}), Walsh window={} iters={} ridge={:.1e}",
+            pattern.r,
+            pattern.acs_start,
+            pattern.acs_end,
+            pattern.acs_len(),
+            self.walsh_window,
+            self.walsh_iters,
+            self.ridge
+        );
+
+        let (nc, nz, ny, nx) = kspace.dim();
+        if ny % pattern.r != 0 {
+            warn!(
+                "SENSE: Ny={} not divisible by R={}; falling back to IFFT+RSS",
+                ny, pattern.r
+            );
+            ifft2_inplace(&mut kspace, (2, 3));
+            let mut magnitude = rss_combine_4d(&kspace);
+            drop(kspace);
+            if self.crop_to_recon_matrix {
+                magnitude = IfftRss::default().maybe_crop(magnitude, file);
+            }
+            return Ok(ImageVolume {
+                data: magnitude,
+                strategy: self.name(),
+            });
+        }
+
+        // --- 4. Per-slice: Walsh maps from ACS, then SENSE unfold -----------
+        let mut output = Array3::<f32>::zeros((nz, ny, nx));
+        for kz in 0..nz {
+            // Low-res coil images from ACS only (ACS lines copied into an
+            // otherwise-zero tensor, then IFFT2).
+            let mut acs_k = Array4::<Complex32>::zeros(kspace.raw_dim());
+            for c in 0..nc {
+                for ky in pattern.acs_start..pattern.acs_end {
+                    for x in 0..nx {
+                        acs_k[[c, kz, ky, x]] = kspace[[c, kz, ky, x]];
+                    }
+                }
+            }
+            ifft2_inplace(&mut acs_k, (2, 3));
+            let low_res = acs_k.index_axis(Axis(1), kz).to_owned();
+            drop(acs_k);
+            let maps = walsh_sensitivity_maps(&low_res, self.walsh_window, self.walsh_iters);
+
+            // Aliased coil images: IFFT the full kspace slice (zeros at
+            // missing lines).
+            let mut aliased_k = kspace.slice(s![.., kz..=kz, .., ..]).to_owned();
+            ifft2_inplace(&mut aliased_k, (2, 3));
+            let aliased = aliased_k.index_axis(Axis(1), 0).to_owned();
+
+            let unfolded = sense_unfold_1d(&aliased, &maps, pattern.r, self.ridge);
+            for y in 0..ny {
+                for x in 0..nx {
+                    output[[kz, y, x]] = unfolded[[y, x]].norm();
+                }
+            }
+        }
+        drop(kspace);
+
+        let mut magnitude = output;
+        if self.crop_to_recon_matrix {
+            magnitude = IfftRss::default().maybe_crop(magnitude, file);
+        }
+
+        Ok(ImageVolume {
+            data: magnitude,
+            strategy: self.name(),
+        })
+    }
+}
