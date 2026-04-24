@@ -589,7 +589,14 @@ fn cmd_recon(
     let magnitude = volume.data;
     let gfactor = volume.gfactor;
 
-    std::fs::create_dir_all(out_dir).with_context(|| format!("creating {}", out_dir.display()))?;
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "recon".into());
+
+    let file_out_dir = out_dir.join(&stem);
+    std::fs::create_dir_all(&file_out_dir)
+        .with_context(|| format!("creating {}", file_out_dir.display()))?;
 
     let (nz, ny, nx) = magnitude.dim();
     info!("Image volume: {} slices x {}x{}", nz, ny, nx);
@@ -599,11 +606,6 @@ fn cmd_recon(
         Some(s) => bail!("slice {s} out of range (0..{nz})"),
         None => (0..nz).collect(),
     };
-
-    let stem = path
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "recon".into());
 
     for iz in slices {
         let slice: Array2<f32> = magnitude.index_axis(Axis(0), iz).to_owned();
@@ -627,7 +629,7 @@ fn cmd_recon(
         };
         info!("Slice {iz}: min={mn:.3e}  max={mx:.3e}  mean={mean:.3e}");
 
-        let png_path = out_dir.join(format!("{stem}_slice_{iz:04}.png"));
+        let png_path = file_out_dir.join(format!("slice_{iz:04}.png"));
         write_png_windowed(&slice, &png_path, pct_low, pct_high)
             .with_context(|| format!("writing {}", png_path.display()))?;
         info!("Wrote {}", png_path.display());
@@ -636,7 +638,7 @@ fn cmd_recon(
             match gfactor.as_ref() {
                 Some(gv) => {
                     let gslice: Array2<f32> = gv.index_axis(Axis(0), iz).to_owned();
-                    let gpath = out_dir.join(format!("{stem}_gfactor_slice_{iz:04}.png"));
+                    let gpath = file_out_dir.join(format!("gfactor_slice_{iz:04}.png"));
                     // Window g-factor to [1, max(2, p99)] for visibility.
                     let mut sorted: Vec<f32> = gslice.iter().copied().collect();
                     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
