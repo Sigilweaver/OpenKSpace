@@ -45,6 +45,17 @@ not implementations.
   Academic Press, 2004. — reference text for navigator phase correction
   (§13.5), readout oversampling handling, partial-Fourier homodyne.
 
+- *Noll DC, Nishimura DG, Macovski A.* "Homodyne detection in magnetic
+  resonance imaging." **IEEE Transactions on Medical Imaging** 10(2):
+  154–163, 1991. — reference for the partial-Fourier homodyne
+  reconstruction (ramp/step k-space weighting + low-frequency phase
+  demodulation).
+
+- *McGibney G, Smith MR, Nichols ST, Crawley A.* "Quantitative evaluation
+  of several partial Fourier reconstruction algorithms used in MRI."
+  **MRM** 30(1):51–59, 1993. — comparison of partial-Fourier techniques
+  used when designing our weighting profile.
+
 - *Hammernik K et al.* "Learning a variational network for reconstruction of
   accelerated MRI data." **MRM** 79(6):3055–3071, 2018. — origin of several
   fully-sampled knee datasets used in our validation corpus.

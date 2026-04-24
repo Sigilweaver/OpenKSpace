@@ -13,6 +13,7 @@ use crate::coil::rss_combine_4d;
 use crate::crop::center_crop_3d;
 use crate::fft::{ifft2_inplace, ifft3_inplace};
 use crate::oversampling::OversamplingRemover;
+use crate::partial_fourier::{homodyne_reconstruct, PartialFourierPlan};
 use crate::phasecorr::PhaseCorrector;
 use crate::prewhiten::NoisePrewhitener;
 use ndarray::Array3;
@@ -60,6 +61,7 @@ pub struct IfftRss {
     pub remove_oversampling: bool,
     pub prewhiten: bool,
     pub phase_correct: bool,
+    pub partial_fourier: bool,
     pub fft_mode: FftMode,
     pub crop_to_recon_matrix: bool,
 }
@@ -70,6 +72,7 @@ impl Default for IfftRss {
             remove_oversampling: true,
             prewhiten: true,
             phase_correct: true,
+            partial_fourier: true,
             fft_mode: FftMode::Auto,
             crop_to_recon_matrix: true,
         }
@@ -120,23 +123,8 @@ impl ReconStrategy for IfftRss {
             None
         };
 
-        // --- 2. Decide 2D vs 3D ---------------------------------------------
-        let three_d = match self.fft_mode {
-            FftMode::Auto => file.is_3d_encoding()?,
-            FftMode::TwoD => false,
-            FftMode::ThreeD => true,
-        };
-        info!(
-            "FFT mode: {}",
-            if three_d {
-                "3D (kz, ky, kx)"
-            } else {
-                "2D (ky, kx)"
-            }
-        );
-
         // --- 3. Image pass: read, apply corrections, place into k-space -----
-        let mut kspace = file.read_kspace_with(|acq| {
+        let (mut kspace, mask) = file.read_kspace_with_mask(|acq| {
             if let Some(w) = whitener.as_ref() {
                 w.apply(acq);
             }
@@ -146,9 +134,42 @@ impl ReconStrategy for IfftRss {
             }
         })?;
 
+        // --- 3b. Partial Fourier (homodyne) ---------------------------------
+        //
+        // If the acquisition is asymmetric along ky and otherwise contiguous
+        // (no periodic gaps), dispatch to homodyne reconstruction instead of
+        // the plain IFFT+RSS path. Does nothing in 3D mode.
+        let three_d = match self.fft_mode {
+            FftMode::Auto => file.is_3d_encoding()?,
+            FftMode::TwoD => false,
+            FftMode::ThreeD => true,
+        };
+        if !three_d && self.partial_fourier {
+            let ky_dc = (kspace.shape()[2] / 2) as usize;
+            if let Some(plan) = PartialFourierPlan::detect(&mask, ky_dc) {
+                let mut magnitude = homodyne_reconstruct(&kspace, &plan);
+                drop(kspace);
+                if self.crop_to_recon_matrix {
+                    magnitude = self.maybe_crop(magnitude, file);
+                }
+                return Ok(ImageVolume {
+                    data: magnitude,
+                    strategy: self.name(),
+                });
+            }
+        }
+
         // --- 4. Centred inverse FFT -----------------------------------------
         //
         // Tensor axes are `[channel, kz, ky, kx]` = `[0, 1, 2, 3]`.
+        info!(
+            "FFT mode: {}",
+            if three_d {
+                "3D (kz, ky, kx)"
+            } else {
+                "2D (ky, kx)"
+            }
+        );
         if three_d {
             info!("Running 3D IFFT on axes (kz=1, ky=2, kx=3)");
             ifft3_inplace(&mut kspace, (1, 2, 3));
@@ -164,36 +185,43 @@ impl ReconStrategy for IfftRss {
 
         // --- 6. Optional crop to the recon matrix ---------------------------
         if self.crop_to_recon_matrix {
-            let rm = &file.header.encoding.recon_matrix;
-            let (nz, ny, nx) = magnitude.dim();
-            let tz = if (rm.z as usize) >= 2 {
-                (rm.z as usize).min(nz)
-            } else {
-                nz
-            };
-            let ty = if rm.y as usize >= 1 {
-                (rm.y as usize).min(ny)
-            } else {
-                ny
-            };
-            let tx = if rm.x as usize >= 1 {
-                (rm.x as usize).min(nx)
-            } else {
-                nx
-            };
-            if (tz, ty, tx) != (nz, ny, nx) && tx <= nx && ty <= ny && tz <= nz {
-                info!(
-                    "Cropping recon from {}x{}x{} -> {}x{}x{} (recon matrix)",
-                    nz, ny, nx, tz, ty, tx
-                );
-                magnitude = center_crop_3d(&magnitude, (tz, ty, tx));
-            }
+            magnitude = self.maybe_crop(magnitude, file);
         }
 
         Ok(ImageVolume {
             data: magnitude,
             strategy: self.name(),
         })
+    }
+}
+
+impl IfftRss {
+    fn maybe_crop(&self, mut magnitude: Array3<f32>, file: &IsmrmrdFile) -> Array3<f32> {
+        let rm = &file.header.encoding.recon_matrix;
+        let (nz, ny, nx) = magnitude.dim();
+        let tz = if (rm.z as usize) >= 2 {
+            (rm.z as usize).min(nz)
+        } else {
+            nz
+        };
+        let ty = if rm.y as usize >= 1 {
+            (rm.y as usize).min(ny)
+        } else {
+            ny
+        };
+        let tx = if rm.x as usize >= 1 {
+            (rm.x as usize).min(nx)
+        } else {
+            nx
+        };
+        if (tz, ty, tx) != (nz, ny, nx) && tx <= nx && ty <= ny && tz <= nz {
+            info!(
+                "Cropping recon from {}x{}x{} -> {}x{}x{} (recon matrix)",
+                nz, ny, nx, tz, ty, tx
+            );
+            magnitude = center_crop_3d(&magnitude, (tz, ty, tx));
+        }
+        magnitude
     }
 }
 

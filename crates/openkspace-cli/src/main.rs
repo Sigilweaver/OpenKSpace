@@ -79,6 +79,11 @@ enum Cmd {
         #[arg(long)]
         no_oversampling_removal: bool,
 
+        /// Disable partial-Fourier / homodyne reconstruction along ky
+        /// (on by default when the ky mask is asymmetric around DC)
+        #[arg(long)]
+        no_partial_fourier: bool,
+
         /// FFT mode: auto (2D/3D from data), 2d, 3d
         #[arg(long, value_enum, default_value_t = FftModeArg::Auto)]
         fft: FftModeArg,
@@ -166,6 +171,7 @@ fn main() -> Result<()> {
             no_prewhiten,
             no_phasecorr,
             no_oversampling_removal,
+            no_partial_fourier,
             fft,
             strategy,
             grappa_kernel_ky,
@@ -181,6 +187,7 @@ fn main() -> Result<()> {
             no_prewhiten,
             no_phasecorr,
             no_oversampling_removal,
+            no_partial_fourier,
             fft.into(),
             strategy,
             grappa_kernel_ky,
@@ -349,6 +356,7 @@ fn cmd_recon(
     no_prewhiten: bool,
     no_phasecorr: bool,
     no_oversampling_removal: bool,
+    no_partial_fourier: bool,
     fft_mode: FftMode,
     strategy_arg: StrategyArg,
     grappa_kernel_ky: usize,
@@ -374,15 +382,17 @@ fn cmd_recon(
                 remove_oversampling: !no_oversampling_removal,
                 prewhiten: !no_prewhiten,
                 phase_correct: !no_phasecorr,
+                partial_fourier: !no_partial_fourier,
                 fft_mode,
                 crop_to_recon_matrix: !no_crop,
             };
             info!(
-                "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, fft={:?})",
+                "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, partial_fourier={}, fft={:?})",
                 strategy.name(),
                 strategy.remove_oversampling,
                 strategy.prewhiten,
                 strategy.phase_correct,
+                strategy.partial_fourier,
                 strategy.fft_mode,
             );
             strategy
