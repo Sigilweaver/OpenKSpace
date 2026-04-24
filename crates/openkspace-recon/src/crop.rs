@@ -22,7 +22,8 @@ pub fn center_crop_3d(vol: &Array3<f32>, target: (usize, usize, usize)) -> Array
     let y0 = (ny - ty) / 2;
     let x0 = (nx - tx) / 2;
 
-    vol.slice(s![z0..z0 + tz, y0..y0 + ty, x0..x0 + tx]).to_owned()
+    vol.slice(s![z0..z0 + tz, y0..y0 + ty, x0..x0 + tx])
+        .to_owned()
 }
 
 #[cfg(test)]
@@ -34,7 +35,11 @@ mod tests {
     fn crop_even_centered() {
         let mut v = Array3::<f32>::zeros((1, 4, 8));
         // Central 2x4 region -- mark it with 1.0.
-        for y in 1..3 { for x in 2..6 { v[[0, y, x]] = 1.0; } }
+        for y in 1..3 {
+            for x in 2..6 {
+                v[[0, y, x]] = 1.0;
+            }
+        }
         let c = center_crop_3d(&v, (1, 2, 4));
         assert_eq!(c.dim(), (1, 2, 4));
         assert!(c.iter().all(|&x| x == 1.0));
