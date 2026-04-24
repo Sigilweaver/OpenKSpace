@@ -146,6 +146,79 @@ pub fn sense_unfold_1d(
     out
 }
 
+/// Compute the SENSE geometry-factor (g-factor) map for the same
+/// acceleration pattern that [`sense_unfold_1d`] would unfold.
+///
+/// The g-factor quantifies the coil-geometry-dependent SNR penalty of
+/// SENSE unfolding: it is 1.0 where the coil geometry is perfectly
+/// conditioned and grows wherever the linear system becomes ill-
+/// conditioned. Following Pruessmann et al. (MRM 42(5), 1999), at
+/// each voxel `(y0, x)` and each aliased position `k = 0..R`,
+///
+/// ```text
+///   g[k] = sqrt( ((C^H C)^{-1})[k,k] * (C^H C)[k,k] )
+/// ```
+///
+/// where `C` is the same `Nc × R` sensitivity matrix used by the
+/// unfold. To keep numerics tractable we use the same Tikhonov
+/// ridge as the unfold solver; the result is therefore a practical
+/// (mildly regularised) g-factor rather than the noise-exact value.
+pub fn sense_gfactor_1d(maps: &Array3<Complex32>, r: usize, ridge: f32) -> Array2<f32> {
+    let (nc, ny, nx) = maps.dim();
+    assert!(r >= 1);
+    assert!(ny % r == 0);
+    let ny_red = ny / r;
+    let mut g = Array2::<f32>::zeros((ny, nx));
+    if nc == 0 || nx == 0 || ny_red == 0 {
+        return g;
+    }
+
+    let mut c_mat = Array2::<Complex32>::zeros((nc, r));
+    let mut chc = Array2::<Complex32>::zeros((r, r));
+
+    for x in 0..nx {
+        for y0 in 0..ny_red {
+            for c in 0..nc {
+                for k in 0..r {
+                    c_mat[[c, k]] = maps[[c, y0 + k * ny_red, x]];
+                }
+            }
+            for a in 0..r {
+                for b in 0..r {
+                    let mut acc = Complex32::new(0.0, 0.0);
+                    for c in 0..nc {
+                        acc += c_mat[[c, a]].conj() * c_mat[[c, b]];
+                    }
+                    if a == b {
+                        acc += Complex32::new(ridge, 0.0);
+                    }
+                    chc[[a, b]] = acc;
+                }
+            }
+            // Invert chc via Cholesky to get the diagonal of (C^H C)^{-1}.
+            let Some(lower) = cholesky_lower(&chc) else {
+                continue;
+            };
+            let Some(inv_l) = invert_lower_triangular(&lower) else {
+                continue;
+            };
+            // (C^H C)^{-1} = inv_l^H * inv_l. Its diagonal entries are
+            //   sum_{j>=i} |inv_l[j, i]|^2.
+            for k in 0..r {
+                let mut inv_diag = 0.0f32;
+                for j in k..r {
+                    inv_diag += inv_l[[j, k]].norm_sqr();
+                }
+                // chc[k,k] is real-positive-definite up to the ridge.
+                let chc_diag = chc[[k, k]].re.max(0.0);
+                let val = (inv_diag * chc_diag).max(0.0).sqrt();
+                g[[y0 + k * ny_red, x]] = val;
+            }
+        }
+    }
+    g
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -301,5 +374,61 @@ mod tests {
         }
         // Kill unused-import warnings.
         let _ = PI;
+    }
+
+    /// With R=1 and orthonormal (unit) coil maps, the g-factor should
+    /// be exactly 1.0 everywhere -- there is no geometry penalty
+    /// because no unfolding takes place.
+    #[test]
+    fn gfactor_is_unity_when_r1_unit_maps() {
+        let nc = 3;
+        let ny = 6;
+        let nx = 5;
+        let mut maps = Array3::<Complex32>::zeros((nc, ny, nx));
+        for c in 0..nc {
+            for y in 0..ny {
+                for x in 0..nx {
+                    maps[[c, y, x]] = Complex32::new(1.0, 0.0);
+                }
+            }
+        }
+        let g = sense_gfactor_1d(&maps, 1, 0.0);
+        for y in 0..ny {
+            for x in 0..nx {
+                assert!((g[[y, x]] - 1.0).abs() < 1e-4, "g={}", g[[y, x]]);
+            }
+        }
+    }
+
+    /// When R=2 and the two aliased positions are illuminated by
+    /// orthogonal coil subsets, the unfold system is perfectly
+    /// conditioned and g should again equal 1.0.
+    #[test]
+    fn gfactor_is_unity_for_orthogonal_maps_r2() {
+        let ny = 4; // => ny_red = 2
+        let nx = 2;
+        let nc = 2;
+        let mut maps = Array3::<Complex32>::zeros((nc, ny, nx));
+        // Coil 0 sees only y in 0..2 (row k=0), coil 1 sees only y in 2..4 (row k=1).
+        for x in 0..nx {
+            for y in 0..2 {
+                maps[[0, y, x]] = Complex32::new(1.0, 0.0);
+            }
+            for y in 2..4 {
+                maps[[1, y, x]] = Complex32::new(1.0, 0.0);
+            }
+        }
+        let g = sense_gfactor_1d(&maps, 2, 0.0);
+        for y in 0..ny {
+            for x in 0..nx {
+                assert!(
+                    (g[[y, x]] - 1.0).abs() < 1e-4,
+                    "g[{},{}]={}",
+                    y,
+                    x,
+                    g[[y, x]]
+                );
+            }
+        }
     }
 }
