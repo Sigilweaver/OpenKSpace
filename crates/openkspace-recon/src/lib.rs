@@ -13,6 +13,7 @@
 
 pub mod coil;
 pub mod crop;
+pub mod cs;
 pub mod espirit;
 pub mod fft;
 pub mod grappa;
@@ -24,9 +25,11 @@ pub mod sense;
 pub mod sensitivity;
 pub mod shift;
 pub mod strategy;
+pub mod wavelet;
 
 pub use coil::rss_combine;
 pub use crop::center_crop_3d;
+pub use cs::fista_cs_single_coil;
 pub use espirit::espirit_sensitivity_maps;
 pub use fft::{ifft2_inplace, ifft3_inplace};
 pub use grappa::{GrappaKernel, SamplingPattern};
@@ -38,5 +41,5 @@ pub use sense::sense_unfold_1d;
 pub use sensitivity::walsh_sensitivity_maps;
 pub use shift::{fftshift_axis, ifftshift_axis};
 pub use strategy::{
-    FftMode, GrappaRss, IfftRss, ImageVolume, ReconStrategy, SenseMapSource, SenseRss,
+    CsRss, FftMode, GrappaRss, IfftRss, ImageVolume, ReconStrategy, SenseMapSource, SenseRss,
 };

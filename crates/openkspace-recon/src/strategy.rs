@@ -666,3 +666,154 @@ impl ReconStrategy for SenseRss {
         })
     }
 }
+
+// ----------------------------------------------------------------------------
+// Compressed sensing (L1-wavelet, per-coil FISTA + RSS combine)
+// ----------------------------------------------------------------------------
+
+use crate::cs::fista_cs_single_coil;
+
+/// Compressed-sensing reconstruction.
+///
+/// For each slice and each coil independently, runs FISTA on the
+/// undersampled k-space with a 1-level Haar-wavelet L1 prior, then
+/// combines the coil images with RSS. This is the "Sparse MRI"
+/// approach of Lustig, Donoho, Pauly (MRM 58(6), 2007), solved with
+/// FISTA (Beck & Teboulle 2009); citations are in `CREDITS.md`.
+///
+/// Falls back to plain IFFT+RSS for 3-D encodings.
+#[derive(Debug, Clone, Copy)]
+pub struct CsRss {
+    pub remove_oversampling: bool,
+    pub prewhiten: bool,
+    pub phase_correct: bool,
+    pub iters: usize,
+    pub lambda: f32,
+    pub fft_mode: FftMode,
+    pub crop_to_recon_matrix: bool,
+}
+
+impl Default for CsRss {
+    fn default() -> Self {
+        Self {
+            remove_oversampling: true,
+            prewhiten: true,
+            phase_correct: true,
+            iters: 60,
+            lambda: 0.01,
+            fft_mode: FftMode::Auto,
+            crop_to_recon_matrix: true,
+        }
+    }
+}
+
+impl ReconStrategy for CsRss {
+    fn name(&self) -> &'static str {
+        "cs"
+    }
+
+    fn reconstruct(&self, file: &IsmrmrdFile) -> IoResult<ImageVolume> {
+        let (whitener, phase_corr) = if self.prewhiten || self.phase_correct {
+            let cal = file.read_calibration()?;
+            let w = if self.prewhiten {
+                NoisePrewhitener::from_noise_acqs(&cal.noise)
+            } else {
+                None
+            };
+            let pc = if self.phase_correct {
+                PhaseCorrector::from_phasecorr_acqs(&cal.phasecorr)
+            } else {
+                PhaseCorrector::default()
+            };
+            (w, pc)
+        } else {
+            (None, PhaseCorrector::default())
+        };
+        let os_remover = if self.remove_oversampling {
+            let enc_x = file.header.encoding.encoded_matrix.x as usize;
+            let rec_x = file.header.encoding.recon_matrix.x as usize;
+            OversamplingRemover::new(enc_x, rec_x)
+        } else {
+            None
+        };
+
+        let (kspace, mask) = file.read_kspace_with_mask(|acq| {
+            if let Some(w) = whitener.as_ref() {
+                w.apply(acq);
+            }
+            phase_corr.apply(acq);
+            if let Some(os) = os_remover.as_ref() {
+                os.apply(acq);
+            }
+        })?;
+
+        let three_d = match self.fft_mode {
+            FftMode::Auto => file.is_3d_encoding()?,
+            FftMode::TwoD => false,
+            FftMode::ThreeD => true,
+        };
+        let (nc, nz, ny, nx) = kspace.dim();
+        if three_d || ny % 2 != 0 || nx % 2 != 0 {
+            info!("CS: 3D or odd dims -- falling back to plain IFFT+RSS");
+            let mut k = kspace;
+            if three_d {
+                ifft3_inplace(&mut k, (1, 2, 3));
+            } else {
+                ifft2_inplace(&mut k, (2, 3));
+            }
+            let mut magnitude = rss_combine_4d(&k);
+            if self.crop_to_recon_matrix {
+                magnitude = IfftRss::default().maybe_crop(magnitude, file);
+            }
+            return Ok(ImageVolume {
+                data: magnitude,
+                strategy: self.name(),
+            });
+        }
+
+        info!(
+            "CS: iters={} lambda={:.3e} (per-coil FISTA + RSS)",
+            self.iters, self.lambda
+        );
+
+        let mut output = Array3::<f32>::zeros((nz, ny, nx));
+        for kz in 0..nz {
+            // 2D sampling mask for this slice.
+            let mut mask2 = ndarray::Array2::<bool>::from_elem((ny, nx), false);
+            for y in 0..ny {
+                for x in 0..nx {
+                    mask2[[y, x]] = mask[[kz, y, x]];
+                }
+            }
+            let mut coil_imgs: Vec<ndarray::Array2<Complex32>> = Vec::with_capacity(nc);
+            for c in 0..nc {
+                let mut kzf = ndarray::Array2::<Complex32>::zeros((ny, nx));
+                for y in 0..ny {
+                    for x in 0..nx {
+                        kzf[[y, x]] = kspace[[c, kz, y, x]];
+                    }
+                }
+                let recon = fista_cs_single_coil(&kzf, &mask2, self.iters, self.lambda);
+                coil_imgs.push(recon);
+            }
+            for y in 0..ny {
+                for x in 0..nx {
+                    let mut s = 0.0f32;
+                    for c in 0..nc {
+                        s += coil_imgs[c][[y, x]].norm_sqr();
+                    }
+                    output[[kz, y, x]] = s.sqrt();
+                }
+            }
+        }
+
+        let mut magnitude = output;
+        if self.crop_to_recon_matrix {
+            magnitude = IfftRss::default().maybe_crop(magnitude, file);
+        }
+        Ok(ImageVolume {
+            data: magnitude,
+            strategy: self.name(),
+        })
+    }
+}

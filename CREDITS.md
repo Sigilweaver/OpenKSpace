@@ -61,6 +61,15 @@ not implementations.
   **MRM** 30(1):51–59, 1993. — comparison of partial-Fourier techniques
   used when designing our weighting profile.
 
+- *Lustig M, Donoho D, Pauly JM.* "Sparse MRI: the application of compressed
+  sensing for rapid MR imaging." **MRM** 58(6):1182–1195, 2007. — reference
+  for the compressed-sensing reconstruction with an L1-wavelet prior.
+
+- *Beck A, Teboulle M.* "A fast iterative shrinkage-thresholding algorithm
+  for linear inverse problems." **SIAM Journal on Imaging Sciences**
+  2(1):183–202, 2009. — reference for the FISTA solver used by our CS
+  strategy.
+
 - *Hammernik K et al.* "Learning a variational network for reconstruction of
   accelerated MRI data." **MRM** 79(6):3055–3071, 2018. — origin of several
   fully-sampled knee datasets used in our validation corpus.
