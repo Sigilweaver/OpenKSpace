@@ -8,7 +8,9 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use ndarray::{Array2, Axis};
 use openkspace_io::ismrmrd::IsmrmrdFile;
-use openkspace_recon::{FftMode, GrappaRss, IfftRss, ReconStrategy, SenseMapSource, SenseRss};
+use openkspace_recon::{
+    CsRss, FftMode, GrappaRss, IfftRss, ReconStrategy, SenseMapSource, SenseRss,
+};
 use std::path::PathBuf;
 use tracing::info;
 
@@ -131,6 +133,14 @@ enum Cmd {
         /// SENSE: Tikhonov ridge added to C^H C in the unfolding solve
         #[arg(long, default_value_t = 1e-4)]
         sense_ridge: f32,
+
+        /// CS: number of FISTA iterations
+        #[arg(long, default_value_t = 60)]
+        cs_iters: usize,
+
+        /// CS: L1-wavelet regularisation strength
+        #[arg(long, default_value_t = 0.01)]
+        cs_lambda: f32,
     },
 }
 
@@ -157,6 +167,8 @@ enum StrategyArg {
     Grappa,
     #[value(name = "sense")]
     Sense,
+    #[value(name = "cs")]
+    Cs,
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
@@ -229,6 +241,8 @@ fn main() -> Result<()> {
             espirit_threshold,
             espirit_iters,
             sense_ridge,
+            cs_iters,
+            cs_lambda,
         } => cmd_recon(
             &file,
             &out,
@@ -252,6 +266,8 @@ fn main() -> Result<()> {
             espirit_threshold,
             espirit_iters,
             sense_ridge,
+            cs_iters,
+            cs_lambda,
         ),
     }
 }
@@ -428,6 +444,8 @@ fn cmd_recon(
     espirit_threshold: f32,
     espirit_iters: usize,
     sense_ridge: f32,
+    cs_iters: usize,
+    cs_lambda: f32,
 ) -> Result<()> {
     if !(0.0..100.0).contains(&pct_low) || !(0.0..=100.0).contains(&pct_high) || pct_high <= pct_low
     {
@@ -518,6 +536,32 @@ fn cmd_recon(
                 strategy.phase_correct,
                 strategy.map_source,
                 strategy.ridge,
+                strategy.fft_mode,
+            );
+            strategy
+                .reconstruct(&f)
+                .map_err(|e| anyhow::anyhow!("{e}"))
+                .context("reconstruction")?
+        }
+        StrategyArg::Cs => {
+            let strategy = CsRss {
+                remove_oversampling: !no_oversampling_removal,
+                prewhiten: !no_prewhiten,
+                phase_correct: !no_phasecorr,
+                iters: cs_iters,
+                lambda: cs_lambda,
+                fft_mode,
+                crop_to_recon_matrix: !no_crop,
+            };
+            info!(
+                "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, \
+                 iters={}, lambda={:.3e}, fft={:?})",
+                strategy.name(),
+                strategy.remove_oversampling,
+                strategy.prewhiten,
+                strategy.phase_correct,
+                strategy.iters,
+                strategy.lambda,
                 strategy.fft_mode,
             );
             strategy
