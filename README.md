@@ -1,16 +1,43 @@
 # OpenKSpace
 
-A Rust library and CLI for Cartesian MRI k-space reconstruction from [ISMRMRD](https://ismrmrd.github.io/) `.h5` files.
+A Rust library and CLI for Cartesian MRI k-space reconstruction from
+[ISMRMRD](https://ismrmrd.github.io/) `.h5` files.
 
 ## Features
 
+### I/O
 - ISMRMRD HDF5 reader with full `AcquisitionHeader` parsing
-- Noise pre-whitening (Cholesky covariance, Kellman & McVeigh 2005)
-- Navigator echo phase correction
-- Centred IFFT + root-sum-of-squares (RSS) coil combination
-- 2D multi-slice and 3D Cartesian reconstruction paths
+- Automatic extraction of noise and calibration scans
 - Auto-detection of 2D vs 3D encoding from the data
+
+### Calibration passes
+- Noise pre-whitening via per-coil noise covariance + Cholesky
+  (Kellman & McVeigh 2005)
+- Navigator-echo phase correction (removes N/2 ghosting)
+- Readout oversampling removal (image-domain crop after IFFT)
+- Partial-Fourier along ky via homodyne reconstruction
+  (Noll 1991; McGibney 1993)
+
+### Reconstruction strategies (pluggable via the `ReconStrategy` trait)
+| Strategy | Description |
+|---|---|
+| `ifft-rss` | Centred IFFT + root-sum-of-squares coil combination |
+| `grappa` | k-space GRAPPA with ACS-fit convolution kernel (Griswold 2002) |
+| `sense` | Image-domain SENSE unfold, ridge-stabilised (Pruessmann 1999), with optional **g-factor** map output |
+| `cs` | L1-wavelet compressed sensing via FISTA (Lustig 2007; Beck & Teboulle 2009) |
+
+SENSE coil-sensitivity maps can be estimated with either
+- **Walsh** (eigenvector method, Walsh 2000), or
+- **ESPIRiT** (auto-calibrating, Uecker 2014).
+
+All strategies work on both 2D multi-slice and 3D Cartesian data. For 3D
+acquisitions with ky-only undersampling, parallel-imaging
+reconstructions decouple along kz via a 1-D IFFT, reducing the problem
+to independent per-slice unfolds.
+
+### Output
 - PNG image output with percentile contrast windowing
+- Optional g-factor PNG output for SENSE (linear window `[1, p99]`)
 
 ## Usage
 
@@ -21,10 +48,45 @@ openkspace recon <file.h5>                   # reconstruct all slices -> recon_o
     [--out <dir>]                            # output directory (default: recon_out/)
     [--slice <N>]                            # reconstruct one slice only
     [--fft auto|2d|3d]                       # FFT mode (default: auto)
+    [--strategy ifft-rss|grappa|sense|cs]    # reconstruction strategy
     [--no-prewhiten]                         # skip noise pre-whitening
     [--no-phasecorr]                         # skip navigator phase correction
+    [--no-oversampling-removal]              # keep 2x kx samples
+    [--no-partial-fourier]                   # skip homodyne
     [--no-crop]                              # keep full oversampled FOV
-    [--pct-low <f>] [--pct-high <f>]        # contrast window percentiles
+    [--pct-low <f>] [--pct-high <f>]         # contrast window percentiles
+
+  GRAPPA:
+    [--grappa-kernel-ky <k>] [--grappa-kernel-kx <k>]
+    [--grappa-ridge <lam>]
+
+  SENSE:
+    [--sense-maps walsh|espirit]
+    [--sense-walsh-window <w>] [--sense-walsh-iters <n>]
+    [--espirit-kernel <k>] [--espirit-threshold <f>] [--espirit-iters <n>]
+    [--sense-ridge <lam>]
+    [--sense-gfactor]                        # compute g-factor
+    [--write-gfactor]                        # also emit g-factor PNGs
+
+  CS:
+    [--cs-iters <n>] [--cs-lambda <f>]
+```
+
+### Examples
+
+```sh
+# Plain IFFT + RSS
+openkspace recon data.h5 --slice 15
+
+# GRAPPA
+openkspace recon data.h5 --strategy grappa
+
+# SENSE with ESPIRiT maps and g-factor output
+openkspace recon data.h5 --strategy sense \
+    --sense-maps espirit --write-gfactor
+
+# Compressed sensing
+openkspace recon data.h5 --strategy cs --cs-iters 120 --cs-lambda 0.01
 ```
 
 ## Workspace layout
@@ -32,7 +94,7 @@ openkspace recon <file.h5>                   # reconstruct all slices -> recon_o
 | Crate | Description |
 |---|---|
 | `openkspace-io` | ISMRMRD reader, acquisition structs, calibration scan extraction |
-| `openkspace-recon` | Reconstruction math: FFT, coil combination, prewhitening, phase correction |
+| `openkspace-recon` | Reconstruction math: FFT, coil combination, prewhitening, phase correction, GRAPPA, SENSE, ESPIRiT, Walsh, CS |
 | `openkspace-cli` | `openkspace` command-line binary |
 
 ## Building
@@ -49,7 +111,7 @@ The `openkspace` binary is produced at `target/release/openkspace`.
 ## Validation
 
 A Python harness in [scripts/](scripts/) compares the Rust reconstruction
-against a numpy reference on a per-slice basis using SSIM. See
+against a NumPy reference on a per-slice basis using SSIM. See
 [scripts/README.md](scripts/README.md) for details.
 
 ```sh
@@ -58,9 +120,9 @@ against a numpy reference on a per-slice basis using SSIM. See
 
 ## Citation
 
-If you use Sigil in research, please cite the underlying algorithm paper for
-whichever reconstruction method you invoked (see above) and, optionally,
-this repository. The reference list is in [CREDITS.md](CREDITS.md).
+If you use OpenKSpace in research, please cite the underlying algorithm
+paper for whichever reconstruction method you invoked (see
+[CREDITS.md](CREDITS.md)) and, optionally, this repository.
 
 ## License
 

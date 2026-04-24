@@ -101,6 +101,6 @@ BSD). We gratefully use them.
 
 ## Citation
 
-If you use Sigil in research, please cite the underlying algorithm paper for
+If you use OpenKSpace in research, please cite the underlying algorithm paper for
 whichever reconstruction method you invoked (see above) and, optionally,
 this repository.
