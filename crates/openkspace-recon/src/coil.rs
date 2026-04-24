@@ -13,9 +13,7 @@ use num_complex::Complex32;
 ///
 /// Input  shape: `[channels, ...]`  (complex)
 /// Output shape: `[...]`            (real f32)
-pub fn rss_combine<D: Dimension>(
-    coil_images: &Array<Complex32, D>,
-) -> Array<f32, D::Smaller>
+pub fn rss_combine<D: Dimension>(coil_images: &Array<Complex32, D>) -> Array<f32, D::Smaller>
 where
     D: ndarray::RemoveAxis,
 {

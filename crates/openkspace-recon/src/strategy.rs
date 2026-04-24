@@ -424,10 +424,20 @@ impl ReconStrategy for GrappaRss {
 // SENSE
 // ----------------------------------------------------------------------------
 
+use crate::espirit::espirit_sensitivity_maps;
 use crate::sense::sense_unfold_1d;
 use crate::sensitivity::walsh_sensitivity_maps;
 use ndarray::{Array4, Axis};
 use num_complex::Complex32;
+
+/// Which sensitivity-map estimator the SENSE strategy uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SenseMapSource {
+    /// Walsh adaptive combine from low-resolution ACS images.
+    Walsh,
+    /// ESPIRiT eigenvalue approach from the calibration matrix.
+    Espirit,
+}
 
 /// Parallel-imaging reconstruction via SENSE with Walsh sensitivity maps.
 ///
@@ -448,10 +458,18 @@ pub struct SenseRss {
     pub remove_oversampling: bool,
     pub prewhiten: bool,
     pub phase_correct: bool,
+    /// Source of per-voxel coil sensitivities.
+    pub map_source: SenseMapSource,
     /// Half-size of the Walsh covariance window (voxels).
     pub walsh_window: usize,
     /// Number of Walsh power-iteration steps per voxel.
     pub walsh_iters: usize,
+    /// ESPIRiT k-space kernel size (odd).
+    pub espirit_kernel: usize,
+    /// ESPIRiT calibration singular-value threshold (fraction of max).
+    pub espirit_threshold: f32,
+    /// ESPIRiT power-iteration steps (both SVD and per-voxel).
+    pub espirit_iters: usize,
     /// Tikhonov ridge added to `C^H C` in the SENSE normal equations.
     pub ridge: f32,
     pub fft_mode: FftMode,
@@ -464,8 +482,12 @@ impl Default for SenseRss {
             remove_oversampling: true,
             prewhiten: true,
             phase_correct: true,
+            map_source: SenseMapSource::Walsh,
             walsh_window: 3,
             walsh_iters: 6,
+            espirit_kernel: 5,
+            espirit_threshold: 0.02,
+            espirit_iters: 30,
             ridge: 1e-4,
             fft_mode: FftMode::Auto,
             crop_to_recon_matrix: true,
@@ -551,13 +573,12 @@ impl ReconStrategy for SenseRss {
         };
 
         info!(
-            "SENSE: R={}, ACS ky=[{}, {}) (length {}), Walsh window={} iters={} ridge={:.1e}",
+            "SENSE: R={}, ACS ky=[{}, {}) (length {}), map_source={:?} ridge={:.1e}",
             pattern.r,
             pattern.acs_start,
             pattern.acs_end,
             pattern.acs_len(),
-            self.walsh_window,
-            self.walsh_iters,
+            self.map_source,
             self.ridge
         );
 
@@ -579,23 +600,45 @@ impl ReconStrategy for SenseRss {
             });
         }
 
-        // --- 4. Per-slice: Walsh maps from ACS, then SENSE unfold -----------
+        // --- 4. Per-slice: sensitivity maps from ACS, then SENSE unfold ----
         let mut output = Array3::<f32>::zeros((nz, ny, nx));
         for kz in 0..nz {
-            // Low-res coil images from ACS only (ACS lines copied into an
-            // otherwise-zero tensor, then IFFT2).
-            let mut acs_k = Array4::<Complex32>::zeros(kspace.raw_dim());
-            for c in 0..nc {
-                for ky in pattern.acs_start..pattern.acs_end {
-                    for x in 0..nx {
-                        acs_k[[c, kz, ky, x]] = kspace[[c, kz, ky, x]];
+            let maps = match self.map_source {
+                SenseMapSource::Walsh => {
+                    // Low-res coil images from ACS only.
+                    let mut acs_k = Array4::<Complex32>::zeros(kspace.raw_dim());
+                    for c in 0..nc {
+                        for ky in pattern.acs_start..pattern.acs_end {
+                            for x in 0..nx {
+                                acs_k[[c, kz, ky, x]] = kspace[[c, kz, ky, x]];
+                            }
+                        }
                     }
+                    ifft2_inplace(&mut acs_k, (2, 3));
+                    let low_res = acs_k.index_axis(Axis(1), kz).to_owned();
+                    walsh_sensitivity_maps(&low_res, self.walsh_window, self.walsh_iters)
                 }
-            }
-            ifft2_inplace(&mut acs_k, (2, 3));
-            let low_res = acs_k.index_axis(Axis(1), kz).to_owned();
-            drop(acs_k);
-            let maps = walsh_sensitivity_maps(&low_res, self.walsh_window, self.walsh_iters);
+                SenseMapSource::Espirit => {
+                    // Extract the contiguous ACS block of k-space for this
+                    // slice and pass it to ESPIRiT.
+                    let acs_len = pattern.acs_end - pattern.acs_start;
+                    let mut acs_block = ndarray::Array3::<Complex32>::zeros((nc, acs_len, nx));
+                    for c in 0..nc {
+                        for (i, ky) in (pattern.acs_start..pattern.acs_end).enumerate() {
+                            for x in 0..nx {
+                                acs_block[[c, i, x]] = kspace[[c, kz, ky, x]];
+                            }
+                        }
+                    }
+                    espirit_sensitivity_maps(
+                        &acs_block,
+                        (ny, nx),
+                        self.espirit_kernel,
+                        self.espirit_threshold,
+                        self.espirit_iters,
+                    )
+                }
+            };
 
             // Aliased coil images: IFFT the full kspace slice (zeros at
             // missing lines).

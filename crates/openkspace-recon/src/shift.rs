@@ -10,21 +10,27 @@ use num_complex::Complex32;
 /// In-place fftshift along `axis`: rotates the axis by `n / 2`.
 pub fn fftshift_axis<D: Dimension>(a: &mut Array<Complex32, D>, axis: usize) {
     let n = a.len_of(Axis(axis));
-    if n < 2 { return; }
+    if n < 2 {
+        return;
+    }
     rotate_axis(a.view_mut(), axis, n / 2);
 }
 
 /// In-place ifftshift along `axis`: rotates the axis by `(n + 1) / 2`.
 pub fn ifftshift_axis<D: Dimension>(a: &mut Array<Complex32, D>, axis: usize) {
     let n = a.len_of(Axis(axis));
-    if n < 2 { return; }
+    if n < 2 {
+        return;
+    }
     rotate_axis(a.view_mut(), axis, (n + 1) / 2);
 }
 
 /// Shift axis `axis` left by `k` positions (equivalent to `np.roll(-k)`).
 fn rotate_axis<D: Dimension>(mut a: ArrayViewMut<Complex32, D>, axis: usize, k: usize) {
     let n = a.len_of(Axis(axis));
-    if k == 0 || k >= n { return; }
+    if k == 0 || k >= n {
+        return;
+    }
 
     // Work lane-by-lane so we reuse one buffer per fiber.
     let lane_len = n;
@@ -49,7 +55,9 @@ mod tests {
     use super::*;
     use ndarray::array;
 
-    fn c(re: f32) -> Complex32 { Complex32::new(re, 0.0) }
+    fn c(re: f32) -> Complex32 {
+        Complex32::new(re, 0.0)
+    }
 
     #[test]
     fn fftshift_1d_even() {
