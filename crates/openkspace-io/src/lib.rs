@@ -9,6 +9,18 @@
 //!   * Philips raw   (.raw)  -- paired with .lab / .sin
 
 pub mod error;
+pub mod fastmri;
 pub mod ismrmrd;
 
 pub use error::{IoError, IoResult};
+pub use fastmri::{FastmriFile, FastmriMeta};
+
+/// Lightweight format probe: returns `true` if the file has a `/kspace`
+/// dataset (FastMRI layout), `false` otherwise.
+///
+/// Opens the HDF5 file without parsing any headers or logging.
+pub fn is_fastmri<P: AsRef<std::path::Path>>(path: P) -> bool {
+    hdf5_metno::File::open(path)
+        .map(|f| f.dataset("kspace").is_ok())
+        .unwrap_or(false)
+}

@@ -27,7 +27,7 @@ pub mod shift;
 pub mod strategy;
 pub mod wavelet;
 
-pub use coil::rss_combine;
+pub use coil::{rss_combine, rss_combine_4d};
 pub use crop::center_crop_3d;
 pub use cs::fista_cs_single_coil;
 pub use espirit::espirit_sensitivity_maps;
