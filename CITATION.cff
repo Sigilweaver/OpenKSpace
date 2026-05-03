@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+title: "OpenKSpace: A Rust library and CLI for Cartesian MRI k-space reconstruction"
+message: >
+  If you use OpenKSpace in your research, please cite it using the metadata
+  below. Citation is encouraged and appreciated but not legally required.
+type: software
+authors:
+  - alias: Sigilweaver
+    website: "https://github.com/Sigilweaver"
+repository-code: "https://github.com/Sigilweaver/OpenKSpace"
+url: "https://github.com/Sigilweaver/OpenKSpace"
+abstract: >
+  OpenKSpace is a Rust library and command-line tool for Cartesian MRI k-space
+  reconstruction from ISMRMRD (.h5) files. It implements a full calibration and
+  reconstruction pipeline including noise pre-whitening (Kellman & McVeigh 2005),
+  navigator-echo phase correction, readout oversampling removal, and partial-Fourier
+  homodyne reconstruction (Noll 1991; McGibney 1993). Pluggable reconstruction
+  strategies include IFFT + root-sum-of-squares coil combination, GRAPPA
+  (Griswold 2002), SENSE with optional g-factor maps (Pruessmann 1999), and
+  L1-wavelet compressed sensing via FISTA (Lustig 2007; Beck & Teboulle 2009).
+  Coil sensitivity maps can be estimated with the Walsh eigenvector method
+  (Walsh 2000) or ESPIRiT (Uecker 2014). All strategies support both 2D
+  multi-slice and 3D Cartesian acquisitions.
+license: "Apache-2.0"
+date-released: "2026-05-03"
+version: "0.1.0"
+keywords:
+  - MRI
+  - k-space
+  - reconstruction
+  - ISMRMRD
+  - GRAPPA
+  - SENSE
+  - compressed sensing
+  - parallel imaging
+  - medical imaging
+  - Rust
