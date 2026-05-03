@@ -12,8 +12,8 @@ download_fastmri.py
 Download, extract, and verify fastMRI dataset archives.
 
 Reads presigned S3 URLs from corpus/FastMRI.html (the access email from NYU).
-Each archive is downloaded to FastMRI/.downloads/, extracted to FastMRI/,
-then the archive is deleted.  State is tracked in FastMRI/status.json so
+Each archive is downloaded to corpus/FastMRI/.downloads/, extracted to corpus/FastMRI/,
+then the archive is deleted.  State is tracked in corpus/FastMRI/status.json so
 interrupted runs resume cleanly.
 
 Presets:
@@ -58,7 +58,7 @@ from rich.table import Table
 
 REPO_ROOT   = Path(__file__).resolve().parent.parent
 HTML_FILE   = REPO_ROOT / "corpus" / "FastMRI.html"
-DEST_ROOT   = REPO_ROOT / "FastMRI"
+DEST_ROOT   = REPO_ROOT / "corpus" / "FastMRI"
 STATUS_FILE = DEST_ROOT / "status.json"
 WORK_DIR    = DEST_ROOT / ".downloads"
 

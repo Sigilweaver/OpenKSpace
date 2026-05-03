@@ -44,7 +44,7 @@ and forwards the rest.
 cargo build --release
 
 # every .h5 under a directory (recursive)
-./scripts/validate_all.sh corpus/data/knee/siemens/fully_sampled \
+./scripts/validate_all.sh corpus/MRIData-org/knee/siemens/fully_sampled \
     --slice 15 --threshold 0.95 --report report.json
 
 # or an explicit list
