@@ -5,6 +5,10 @@ Cargo.lock.bak
 
 # Local scratch (notes, throwaway scripts, captured tool output)
 .untracked/
+ROADMAP.md
+
+# Secrets & credentials
+.env
 
 # Large binary corpus & derived outputs
 corpus/
