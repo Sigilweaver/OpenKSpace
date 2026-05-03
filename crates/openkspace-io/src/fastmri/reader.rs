@@ -38,17 +38,21 @@ use tracing::info;
 /// ndarray version mismatch that arises when asking hdf5-metno to return
 /// `ndarray::Array<Complex32, _>` directly (hdf5-metno 0.9 bundles its own
 /// ndarray 0.16 while the workspace uses 0.15).
+///
+/// FastMRI HDF5 files store complex64 with compound members named `r` and
+/// `i` (not `re`/`im`), so field names must match exactly for HDF5 name-
+/// based type conversion to succeed.
 #[derive(Debug, Clone, Copy, H5Type)]
 #[repr(C)]
 struct Cf32 {
-    re: f32,
-    im: f32,
+    r: f32,
+    i: f32,
 }
 
 impl From<Cf32> for Complex32 {
     #[inline]
     fn from(c: Cf32) -> Self {
-        Complex32::new(c.re, c.im)
+        Complex32::new(c.r, c.i)
     }
 }
 

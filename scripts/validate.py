@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
 """OpenKSpace validation harness.
 
-Runs the OpenKSpace `openkspace recon` CLI on one or more ISMRMRD files
-and compares the resulting PNG against a numpy reference reconstruction
-using SSIM.
+Supports two file formats:
+
+ISMRMRD (.h5, mridata.org corpus)
+  Builds a numpy IFFT+RSS reference from raw acquisitions, runs
+  `openkspace recon` and compares the windowed PNG via SSIM.
+
+FastMRI (.h5, NYU/Meta corpus)
+  Uses the `reconstruction_rss` dataset bundled in each file as the
+  ground truth. Runs `openkspace recon --format nifti` to get float32
+  output (no 8-bit quantization loss) and compares via SSIM.
+
+Format is auto-detected by probing for the /kspace dataset.
 
 Usage:
     python scripts/validate.py <file.h5>            # single file
@@ -25,6 +34,7 @@ import glob
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 import tempfile
@@ -34,6 +44,64 @@ import h5py
 import numpy as np
 from PIL import Image
 from skimage.metrics import structural_similarity as ssim
+
+
+# ── Format detection ──────────────────────────────────────────────────────────
+
+def _is_fastmri(h5_path: str) -> bool:
+    """Return True if the HDF5 file has a /kspace dataset (FastMRI layout)."""
+    try:
+        with h5py.File(h5_path, "r") as f:
+            return "kspace" in f
+    except Exception:
+        return False
+
+
+# ── FastMRI reference and openkspace runner ───────────────────────────────────
+
+def ref_recon_fastmri(h5_path: str, slice_idx: int) -> np.ndarray:
+    """Load reconstruction_rss[slice_idx] as a float32 (y, x) array."""
+    with h5py.File(h5_path, "r") as f:
+        rss = f["reconstruction_rss"][slice_idx]  # shape (y, x) or (x, y)
+    return np.array(rss, dtype=np.float32)
+
+
+def _read_nifti_volume(nii_path: str) -> np.ndarray:
+    """Read a NIfTI-1 single-file volume written by openkspace.
+
+    openkspace writes:
+      header dim = [3, nx, ny, nz]   (bytes 40-55)
+      data   = f32 values in C order [nz, ny, nx]
+
+    Returns a float32 array of shape (nz, ny, nx).
+    """
+    with open(nii_path, "rb") as f:
+        hdr = f.read(348)
+    dims = struct.unpack_from("<8h", hdr, 40)  # [ndims, d1, d2, d3, ...]
+    nx, ny, nz = int(dims[1]), int(dims[2]), int(dims[3])
+    data = np.fromfile(nii_path, dtype="<f4", offset=352)
+    return data.reshape(nz, ny, nx)
+
+
+def run_openkspace_fastmri(
+    binary: str, h5_path: str, slice_idx: int, out_dir: str
+) -> np.ndarray:
+    """Run openkspace recon --format nifti and return the slice as float32 (y, x)."""
+    stem = os.path.splitext(os.path.basename(h5_path))[0]
+    cmd = [
+        binary, "recon", h5_path,
+        "--out", out_dir,
+        "--slice", str(slice_idx),
+        "--format", "nifti",
+    ]
+    subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    nii_path = os.path.join(out_dir, stem, f"{stem}.nii")
+    if not os.path.exists(nii_path):
+        raise RuntimeError(f"expected NIfTI at {nii_path}")
+
+    vol = _read_nifti_volume(nii_path)  # shape (1, ny, nx) for a single slice
+    return vol[0]  # (ny, nx)
 
 # ISMRMRD AcquisitionFlags (1-based bit positions, mirrored from Rust).
 _FLAG_NOISE = 1 << (19 - 1)
@@ -201,8 +269,10 @@ def validate_one(
 ) -> dict:
     """Run the full validation for one file. Returns a result dict."""
     t0 = time.monotonic()
+    fastmri = _is_fastmri(h5_path)
     result = {
         "file": h5_path,
+        "format": "fastmri" if fastmri else "ismrmrd",
         "slice": slice_idx,
         "threshold": threshold,
         "ssim": None,
@@ -211,31 +281,52 @@ def validate_one(
         "elapsed_s": 0.0,
     }
     try:
-        if verbose:
-            print("  reference recon (numpy) ...", flush=True)
-        ref = ref_recon(h5_path, slice_idx)
-        ref_w = apply_window(ref, pct_low, pct_high)
+        if fastmri:
+            if verbose:
+                print("  reference: reconstruction_rss from file ...", flush=True)
+            ref = ref_recon_fastmri(h5_path, slice_idx)
 
-        if verbose:
-            print("  openkspace recon (Rust) ...", flush=True)
-        with tempfile.TemporaryDirectory() as td:
-            ours = run_openkspace(binary, h5_path, slice_idx, td)
+            if verbose:
+                print("  openkspace recon (Rust, --format nifti) ...", flush=True)
+            with tempfile.TemporaryDirectory() as td:
+                ours = run_openkspace_fastmri(binary, h5_path, slice_idx, td)
 
-        if ref_w.shape != ours.shape:
-            h = min(ref_w.shape[0], ours.shape[0])
-            w = min(ref_w.shape[1], ours.shape[1])
-            ref_w = ref_w[:h, :w]
-            ours = ours[:h, :w]
+            # Align shapes in case of a minor off-by-one.
+            if ref.shape != ours.shape:
+                h = min(ref.shape[0], ours.shape[0])
+                w = min(ref.shape[1], ours.shape[1])
+                ref = ref[:h, :w]
+                ours = ours[:h, :w]
 
-        score = float(ssim(ref_w, ours, data_range=1.0))
+            ref_w = apply_window(ref, pct_low, pct_high)
+            ours_w = apply_window(ours, pct_low, pct_high)
+        else:
+            if verbose:
+                print("  reference recon (numpy) ...", flush=True)
+            ref = ref_recon(h5_path, slice_idx)
+            ref_w = apply_window(ref, pct_low, pct_high)
+
+            if verbose:
+                print("  openkspace recon (Rust) ...", flush=True)
+            with tempfile.TemporaryDirectory() as td:
+                ours_w = run_openkspace(binary, h5_path, slice_idx, td)
+
+            if ref_w.shape != ours_w.shape:
+                h = min(ref_w.shape[0], ours_w.shape[0])
+                w = min(ref_w.shape[1], ours_w.shape[1])
+                ref_w = ref_w[:h, :w]
+                ours_w = ours_w[:h, :w]
+
+        score = float(ssim(ref_w, ours_w, data_range=1.0))
         result["ssim"] = score
         result["status"] = "PASS" if score >= threshold else "FAIL"
     except subprocess.CalledProcessError as e:
         result["error"] = f"openkspace failed: rc={e.returncode}"
-    except Exception as e:  # noqa: BLE001 - report anything the harness hits
+    except Exception as e:  # noqa: BLE001
         result["error"] = f"{type(e).__name__}: {e}"
     result["elapsed_s"] = time.monotonic() - t0
     return result
+
 
 
 def _discover_inputs(paths: list[str]) -> list[str]:
@@ -263,15 +354,17 @@ def _format_summary(results: list[dict], threshold: float) -> str:
     name_w = max((len(os.path.basename(r["file"])) for r in results), default=4)
     name_w = max(name_w, 20)
     header = (
-        f"{'file':<{name_w}}  {'slice':>5}  {'ssim':>7}  {'status':>6}  {'time':>7}"
+        f"{'file':<{name_w}}  {'fmt':>7}  {'slice':>5}  {'ssim':>7}  {'status':>6}  {'time':>7}"
     )
     lines.append(header)
     lines.append("-" * len(header))
     for r in results:
         ssim_str = f"{r['ssim']:.4f}" if r["ssim"] is not None else "  n/a"
         status = r["status"]
+        fmt = r.get("format", "?")
         lines.append(
             f"{os.path.basename(r['file']):<{name_w}}  "
+            f"{fmt:>7}  "
             f"{r['slice']:>5}  {ssim_str:>7}  {status:>6}  {r['elapsed_s']:>6.1f}s"
         )
     n = len(results)
@@ -288,12 +381,12 @@ def _format_summary(results: list[dict], threshold: float) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Validate OpenKSpace against a numpy reference."
+        description="Validate OpenKSpace against a reference reconstruction (ISMRMRD or FastMRI)."
     )
     ap.add_argument(
         "inputs",
         nargs="+",
-        help="one or more ISMRMRD .h5 files, or directories to recurse into",
+        help="one or more .h5 files (ISMRMRD or FastMRI), or directories to recurse into",
     )
     ap.add_argument("--slice", type=int, default=0, help="slice index to compare")
     ap.add_argument(
@@ -365,6 +458,7 @@ def main() -> int:
             if r["ssim"] is not None:
                 print(f"SSIM                            : {r['ssim']:.4f}")
             print(f"Threshold                       : {args.threshold:.4f}")
+            print(f"Format                          : {r.get('format', '?')}")
             print(f"File                            : {os.path.basename(r['file'])}")
             if r["error"]:
                 print(f"ERROR                           : {r['error']}")
