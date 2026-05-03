@@ -6,6 +6,7 @@
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
+use indicatif::{ProgressBar, ProgressStyle};
 use ndarray::{Array2, Axis};
 use openkspace_io::ismrmrd::IsmrmrdFile;
 use openkspace_io::{is_fastmri, FastmriFile};
@@ -13,7 +14,9 @@ use openkspace_recon::{
     center_crop_3d, ifft2_inplace, rss_combine_4d, CsRss, FftMode, GrappaRss, IfftRss,
     ReconStrategy, SenseMapSource, SenseRss,
 };
+use serde_json::json;
 use std::path::PathBuf;
+use std::time::Duration;
 use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
@@ -33,10 +36,14 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
-    /// Print ISMRMRD header metadata without loading k-space.
+    /// Print header metadata for an ISMRMRD or FastMRI file.
     Info {
         /// Path to .h5 file
         file: PathBuf,
+
+        /// Emit metadata as JSON (for tooling / scripting integration)
+        #[arg(long)]
+        json: bool,
     },
 
     /// Probe index ranges across all acquisitions (diagnostic).
@@ -152,6 +159,10 @@ enum Cmd {
         /// CS: L1-wavelet regularisation strength
         #[arg(long, default_value_t = 0.01)]
         cs_lambda: f32,
+
+        /// Output format: per-slice PNG, NIfTI-1 volume, or both
+        #[arg(long, value_enum, default_value_t = OutputFormat::Png)]
+        format: OutputFormat,
     },
 }
 
@@ -201,6 +212,16 @@ impl From<FftModeArg> for FftMode {
     }
 }
 
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+enum OutputFormat {
+    /// Per-slice PNGs with percentile contrast windowing (default)
+    Png,
+    /// Single NIfTI-1 volume (.nii)
+    Nifti,
+    /// Both PNG slices and NIfTI volume
+    Both,
+}
+
 fn init_tracing(verbosity: u8) {
     let level = match verbosity {
         0 => "info",
@@ -225,9 +246,10 @@ fn init_tracing(verbosity: u8) {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     init_tracing(cli.verbose);
+    let verbose = cli.verbose;
 
     match cli.cmd {
-        Cmd::Info { file } => cmd_info(&file),
+        Cmd::Info { file, json } => cmd_info(&file, json),
         Cmd::Probe { file } => cmd_probe(&file),
         Cmd::Recon {
             file,
@@ -256,6 +278,7 @@ fn main() -> Result<()> {
             write_gfactor,
             cs_iters,
             cs_lambda,
+            format,
         } => cmd_recon(
             &file,
             &out,
@@ -283,14 +306,16 @@ fn main() -> Result<()> {
             write_gfactor,
             cs_iters,
             cs_lambda,
+            format,
+            verbose,
         ),
     }
 }
 
-fn cmd_info(path: &PathBuf) -> Result<()> {
+fn cmd_info(path: &PathBuf, json: bool) -> Result<()> {
     match detect_format(path)? {
-        FileFormat::Ismrmrd => cmd_info_ismrmrd(path),
-        FileFormat::FastMri => cmd_info_fastmri(path),
+        FileFormat::Ismrmrd => cmd_info_ismrmrd(path, json),
+        FileFormat::FastMri => cmd_info_fastmri(path, json),
     }
 }
 
@@ -321,9 +346,48 @@ fn detect_format(path: &PathBuf) -> Result<FileFormat> {
 
 // ── info ──────────────────────────────────────────────────────────────────────
 
-fn cmd_info_ismrmrd(path: &PathBuf) -> Result<()> {
+fn cmd_info_ismrmrd(path: &PathBuf, json: bool) -> Result<()> {
     let f = IsmrmrdFile::open(path).with_context(|| format!("opening {}", path.display()))?;
     let h = &f.header;
+
+    if json {
+        let v = json!({
+            "format": "ISMRMRD",
+            "file": path.display().to_string(),
+            "acquisitions": f.n_acquisitions,
+            "vendor": h.system_vendor,
+            "model": h.system_model,
+            "field_strength_t": h.field_strength_t,
+            "channels": h.receiver_channels,
+            "trajectory": h.encoding.trajectory,
+            "encoded_matrix": {
+                "x": h.encoding.encoded_matrix.x,
+                "y": h.encoding.encoded_matrix.y,
+                "z": h.encoding.encoded_matrix.z
+            },
+            "recon_matrix": {
+                "x": h.encoding.recon_matrix.x,
+                "y": h.encoding.recon_matrix.y,
+                "z": h.encoding.recon_matrix.z
+            },
+            "encoded_fov_mm": {
+                "x": h.encoding.encoded_fov.x,
+                "y": h.encoding.encoded_fov.y,
+                "z": h.encoding.encoded_fov.z
+            },
+            "ky_range": {
+                "min": h.encoding.ky_limit.minimum,
+                "max": h.encoding.ky_limit.maximum,
+                "center": h.encoding.ky_limit.center
+            },
+            "slice_range": {
+                "min": h.encoding.slice_limit.minimum,
+                "max": h.encoding.slice_limit.maximum
+            }
+        });
+        println!("{}", serde_json::to_string_pretty(&v)?);
+        return Ok(());
+    }
 
     println!("Format        : ISMRMRD");
     println!("File          : {}", path.display());
@@ -356,10 +420,29 @@ fn cmd_info_ismrmrd(path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn cmd_info_fastmri(path: &PathBuf) -> Result<()> {
+fn cmd_info_fastmri(path: &PathBuf, json: bool) -> Result<()> {
     let f = FastmriFile::open(path).with_context(|| format!("opening {}", path.display()))?;
     let m = &f.meta;
     let h = &m.header;
+
+    if json {
+        let v = json!({
+            "format": "FastMRI",
+            "file": path.display().to_string(),
+            "acquisition": m.acquisition,
+            "patient_id": m.patient_id,
+            "n_slices": m.n_slices,
+            "n_coils": m.n_coils,
+            "encoded_matrix": { "kx": m.n_kx, "ky": m.n_ky },
+            "recon_matrix": { "x": m.recon_x, "y": m.recon_y },
+            "vendor": h.system_vendor,
+            "model": h.system_model,
+            "field_strength_t": h.field_strength_t,
+            "trajectory": h.encoding.trajectory
+        });
+        println!("{}", serde_json::to_string_pretty(&v)?);
+        return Ok(());
+    }
 
     println!("Format        : FastMRI");
     println!("File          : {}", path.display());
@@ -535,6 +618,8 @@ fn cmd_recon(
     write_gfactor: bool,
     cs_iters: usize,
     cs_lambda: f32,
+    format: OutputFormat,
+    verbose: u8,
 ) -> Result<()> {
     if !(0.0..100.0).contains(&pct_low) || !(0.0..=100.0).contains(&pct_high) || pct_high <= pct_low
     {
@@ -545,7 +630,7 @@ fn cmd_recon(
         FileFormat::FastMri => {
             return cmd_recon_fastmri(
                 path, out_dir, slice_sel, pct_low, pct_high, no_crop,
-                strategy_arg,
+                strategy_arg, format, verbose,
             );
         }
         FileFormat::Ismrmrd => {}
@@ -558,6 +643,20 @@ fn cmd_recon(
             f.header.encoding.trajectory
         );
     }
+
+    let spinner = if verbose == 0 {
+        let b = ProgressBar::new_spinner();
+        b.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.cyan} {msg}")
+                .unwrap(),
+        );
+        b.enable_steady_tick(Duration::from_millis(100));
+        b.set_message("Reconstructing...");
+        Some(b)
+    } else {
+        None
+    };
 
     let volume = match strategy_arg {
         StrategyArg::IfftRss => {
@@ -670,6 +769,9 @@ fn cmd_recon(
                 .context("reconstruction")?
         }
     };
+    if let Some(b) = spinner {
+        b.finish_and_clear();
+    }
     let magnitude = volume.data;
     let gfactor = volume.gfactor;
 
@@ -691,65 +793,99 @@ fn cmd_recon(
         None => (0..nz).collect(),
     };
 
-    for iz in slices {
-        let slice: Array2<f32> = magnitude.index_axis(Axis(0), iz).to_owned();
-
-        // Diagnostic stats
-        let (mn, mx, mean) = {
-            let mut min = f32::INFINITY;
-            let mut max = f32::NEG_INFINITY;
-            let mut sum = 0.0f64;
-            let n = slice.len();
-            for &v in slice.iter() {
-                if v < min {
-                    min = v;
-                }
-                if v > max {
-                    max = v;
-                }
-                sum += v as f64;
+    // ── NIfTI output ─────────────────────────────────────────────────────
+    if matches!(format, OutputFormat::Nifti | OutputFormat::Both) {
+        let nii_vol: ndarray::Array3<f32> = if slices.len() == nz {
+            magnitude.view().to_owned()
+        } else {
+            let mut flat = Vec::with_capacity(slices.len() * ny * nx);
+            for &s in &slices {
+                flat.extend(magnitude.index_axis(Axis(0), s).iter().copied());
             }
-            (min, max, (sum / n as f64) as f32)
+            ndarray::Array3::from_shape_vec((slices.len(), ny, nx), flat)
+                .context("building NIfTI sub-volume")?
         };
-        info!("Slice {iz}: min={mn:.3e}  max={mx:.3e}  mean={mean:.3e}");
+        let nii_path = file_out_dir.join(format!("{stem}.nii"));
+        write_nifti_volume(&nii_vol, &nii_path)
+            .with_context(|| format!("writing {}", nii_path.display()))?;
+        info!("Wrote {} (NIfTI)", nii_path.display());
+    }
 
-        let png_path = file_out_dir.join(format!("slice_{iz:04}.png"));
-        write_png_windowed(&slice, &png_path, pct_low, pct_high)
-            .with_context(|| format!("writing {}", png_path.display()))?;
-        info!("Wrote {}", png_path.display());
+    // ── PNG output ────────────────────────────────────────────────────────
+    let write_pngs =
+        matches!(format, OutputFormat::Png | OutputFormat::Both) || write_gfactor;
+    if write_pngs {
+        let write_pb = if verbose == 0 && slices.len() > 1 {
+            let b = ProgressBar::new(slices.len() as u64);
+            b.set_style(
+                ProgressStyle::default_bar()
+                    .template("[{bar:40.cyan/blue}] {pos}/{len} slices  {elapsed_precise}")
+                    .unwrap()
+                    .progress_chars("=>-"),
+            );
+            Some(b)
+        } else {
+            None
+        };
 
-        if write_gfactor {
-            match gfactor.as_ref() {
-                Some(gv) => {
-                    let gslice: Array2<f32> = gv.index_axis(Axis(0), iz).to_owned();
-                    let gpath = file_out_dir.join(format!("gfactor_slice_{iz:04}.png"));
-                    // Window g-factor to [1, max(2, p99)] for visibility.
-                    let mut sorted: Vec<f32> = gslice.iter().copied().collect();
-                    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                    let hi = percentile(&sorted, 99.0).max(2.0);
-                    write_png_linear(&gslice, &gpath, 1.0, hi)
-                        .with_context(|| format!("writing {}", gpath.display()))?;
-                    info!(
-                        "Wrote {} (g-factor, window [1.0, {:.2}])",
-                        gpath.display(),
-                        hi
-                    );
-                }
-                None => {
-                    warn!("--write-gfactor requested but strategy produced no g-factor map");
+        for iz in &slices {
+            let iz = *iz;
+            let slice: Array2<f32> = magnitude.index_axis(Axis(0), iz).to_owned();
+
+            if verbose >= 1 {
+                let (mn, mx, mean) = slice_stats(&slice);
+                info!("Slice {iz}: min={mn:.3e}  max={mx:.3e}  mean={mean:.3e}");
+            }
+
+            if matches!(format, OutputFormat::Png | OutputFormat::Both) {
+                let png_path = file_out_dir.join(format!("slice_{iz:04}.png"));
+                write_png_windowed(&slice, &png_path, pct_low, pct_high)
+                    .with_context(|| format!("writing {}", png_path.display()))?;
+                if verbose >= 1 {
+                    info!("Wrote {}", png_path.display());
                 }
             }
+
+            if write_gfactor {
+                match gfactor.as_ref() {
+                    Some(gv) => {
+                        let gslice: Array2<f32> = gv.index_axis(Axis(0), iz).to_owned();
+                        let gpath =
+                            file_out_dir.join(format!("gfactor_slice_{iz:04}.png"));
+                        let mut sorted: Vec<f32> = gslice.iter().copied().collect();
+                        sorted.sort_by(|a, b| {
+                            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                        let hi = percentile(&sorted, 99.0).max(2.0);
+                        write_png_linear(&gslice, &gpath, 1.0, hi)
+                            .with_context(|| format!("writing {}", gpath.display()))?;
+                        if verbose >= 1 {
+                            info!(
+                                "Wrote {} (g-factor, window [1.0, {:.2}])",
+                                gpath.display(),
+                                hi
+                            );
+                        }
+                    }
+                    None => {
+                        warn!("--write-gfactor requested but strategy produced no g-factor map");
+                    }
+                }
+            }
+
+            if let Some(ref b) = write_pb {
+                b.inc(1);
+            }
+        }
+
+        if let Some(b) = write_pb {
+            b.finish_and_clear();
         }
     }
 
     Ok(())
 }
 
-/// FastMRI reconstruction: the kspace tensor is pre-assembled so we skip
-/// all ISMRMRD pre-processing (noise scans, navigators, etc.) and run
-/// IFFT + RSS directly. GRAPPA, SENSE, and CS require undersampling
-/// patterns not present in the fully-sampled multicoil training sets;
-/// those strategies fall back to ifft-rss with a warning.
 fn cmd_recon_fastmri(
     path: &PathBuf,
     out_dir: &PathBuf,
@@ -758,6 +894,8 @@ fn cmd_recon_fastmri(
     pct_high: f32,
     no_crop: bool,
     strategy_arg: StrategyArg,
+    format: OutputFormat,
+    verbose: u8,
 ) -> Result<()> {
     if !matches!(strategy_arg, StrategyArg::IfftRss) {
         warn!(
@@ -775,17 +913,34 @@ fn cmd_recon_fastmri(
         m.n_slices, m.n_coils, m.n_ky, m.n_kx
     );
 
-    // Load and IFFT the full kspace tensor [coils, slices, ky, kx].
+    let spinner = if verbose == 0 {
+        let b = ProgressBar::new_spinner();
+        b.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.cyan} {msg}")
+                .unwrap(),
+        );
+        b.enable_steady_tick(Duration::from_millis(100));
+        b.set_message("Reading k-space and reconstructing...");
+        Some(b)
+    } else {
+        None
+    };
+
     let mut kspace = f
         .read_kspace()
         .map_err(|e| anyhow::anyhow!("{e}"))
         .context("reading kspace")?;
 
     ifft2_inplace(&mut kspace, (2, 3));
-    let mut magnitude = rss_combine_4d(&kspace); // [slices, ky, kx]
+    let mut magnitude = rss_combine_4d(&kspace);
 
     if !no_crop && (m.recon_y != m.n_ky || m.recon_x != m.n_kx) {
         magnitude = center_crop_3d(&magnitude, (m.n_slices, m.recon_y, m.recon_x));
+    }
+
+    if let Some(b) = spinner {
+        b.finish_and_clear();
     }
 
     let (nz, ny, nx) = magnitude.dim();
@@ -805,14 +960,117 @@ fn cmd_recon_fastmri(
         None => (0..nz).collect(),
     };
 
-    for iz in slices {
-        let slice: Array2<f32> = magnitude.index_axis(Axis(0), iz).to_owned();
-        let png_path = file_out_dir.join(format!("slice_{iz:04}.png"));
-        write_png_windowed(&slice, &png_path, pct_low, pct_high)
-            .with_context(|| format!("writing {}", png_path.display()))?;
-        info!("Wrote {}", png_path.display());
+    // ── NIfTI output ─────────────────────────────────────────────────────
+    if matches!(format, OutputFormat::Nifti | OutputFormat::Both) {
+        let nii_vol: ndarray::Array3<f32> = if slices.len() == nz {
+            magnitude.view().to_owned()
+        } else {
+            let mut flat = Vec::with_capacity(slices.len() * ny * nx);
+            for &s in &slices {
+                flat.extend(magnitude.index_axis(Axis(0), s).iter().copied());
+            }
+            ndarray::Array3::from_shape_vec((slices.len(), ny, nx), flat)
+                .context("building NIfTI sub-volume")?
+        };
+        let nii_path = file_out_dir.join(format!("{stem}.nii"));
+        write_nifti_volume(&nii_vol, &nii_path)
+            .with_context(|| format!("writing {}", nii_path.display()))?;
+        info!("Wrote {} (NIfTI)", nii_path.display());
+    }
+
+    // ── PNG output ────────────────────────────────────────────────────────
+    if matches!(format, OutputFormat::Png | OutputFormat::Both) {
+        let write_pb = if verbose == 0 && slices.len() > 1 {
+            let b = ProgressBar::new(slices.len() as u64);
+            b.set_style(
+                ProgressStyle::default_bar()
+                    .template("[{bar:40.cyan/blue}] {pos}/{len} slices  {elapsed_precise}")
+                    .unwrap()
+                    .progress_chars("=>-"),
+            );
+            Some(b)
+        } else {
+            None
+        };
+
+        for iz in &slices {
+            let iz = *iz;
+            let slice: Array2<f32> = magnitude.index_axis(Axis(0), iz).to_owned();
+            let png_path = file_out_dir.join(format!("slice_{iz:04}.png"));
+            write_png_windowed(&slice, &png_path, pct_low, pct_high)
+                .with_context(|| format!("writing {}", png_path.display()))?;
+            if let Some(ref b) = write_pb {
+                b.inc(1);
+            } else {
+                info!("Wrote {}", png_path.display());
+            }
+        }
+
+        if let Some(b) = write_pb {
+            b.finish_and_clear();
+        }
+    }
+
+    Ok(())
+}
+
+/// Write an `Array3<f32>` as a NIfTI-1 single-file volume (.nii).
+///
+/// The input array has shape `[nz, ny, nx]` in C order (x varies fastest in
+/// memory), which maps to NIfTI dim = [3, nx, ny, nz] (Fortran / x-fastest).
+/// Voxel sizes are written as 1.0 mm isotropic; no spatial transform is set.
+fn write_nifti_volume(vol: &ndarray::Array3<f32>, path: &std::path::Path) -> Result<()> {
+    let (nz, ny, nx) = vol.dim();
+
+    // 348-byte NIfTI-1 header, then 4-byte extension block, then data.
+    let mut hdr = [0u8; 348];
+
+    // sizeof_hdr = 348
+    hdr[0..4].copy_from_slice(&348i32.to_le_bytes());
+    // dim[0..7] at byte 40: [ndims, nx, ny, nz, 1, 1, 1, 1]
+    let dims: [i16; 8] = [3, nx as i16, ny as i16, nz as i16, 1, 1, 1, 1];
+    for (i, d) in dims.iter().enumerate() {
+        hdr[40 + i * 2..40 + i * 2 + 2].copy_from_slice(&d.to_le_bytes());
+    }
+    // datatype = 16 (DT_FLOAT32) at byte 70
+    hdr[70..72].copy_from_slice(&16i16.to_le_bytes());
+    // bitpix = 32 at byte 72
+    hdr[72..74].copy_from_slice(&32i16.to_le_bytes());
+    // pixdim[0..7] at byte 76: qfac=1, voxel sizes = 1 mm
+    let pixdim: [f32; 8] = [1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0];
+    for (i, p) in pixdim.iter().enumerate() {
+        hdr[76 + i * 4..76 + i * 4 + 4].copy_from_slice(&p.to_le_bytes());
+    }
+    // vox_offset = 352.0 (header + extension block) at byte 108
+    hdr[108..112].copy_from_slice(&352.0f32.to_le_bytes());
+    // scl_slope = 1.0 at byte 112
+    hdr[112..116].copy_from_slice(&1.0f32.to_le_bytes());
+    // magic = "n+1\0" at byte 344
+    hdr[344..348].copy_from_slice(b"n+1\0");
+
+    use std::io::Write;
+    let mut file = std::fs::File::create(path)
+        .with_context(|| format!("creating {}", path.display()))?;
+    file.write_all(&hdr)?;
+    file.write_all(&[0u8; 4])?; // no extensions
+    for &v in vol.iter() {
+        file.write_all(&v.to_le_bytes())?;
     }
     Ok(())
+}
+
+/// Compute (min, max, mean) of a 2-D slice for diagnostic logging.
+fn slice_stats(slice: &Array2<f32>) -> (f32, f32, f32) {
+    let mut min = f32::INFINITY;
+    let mut max = f32::NEG_INFINITY;
+    let mut sum = 0.0f64;
+    let n = slice.len();
+    for &v in slice.iter() {
+        if v < min { min = v; }
+        if v > max { max = v; }
+        sum += v as f64;
+    }
+    (min, max, (sum / n as f64) as f32)
 }
 
 /// Write a 2D f32 array to PNG with a fixed linear window `[lo, hi]`.
