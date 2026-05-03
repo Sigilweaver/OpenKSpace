@@ -12,6 +12,7 @@ ROADMAP.md
 
 # Large binary corpus & derived outputs
 corpus/
+FastMRI/
 recon_out/
 *.h5
 *.dat
