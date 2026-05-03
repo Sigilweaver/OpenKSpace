@@ -1,15 +1,17 @@
 //! OpenKSpace command-line interface.
 //!
 //! Subcommands:
-//!   info   -- print header metadata for an ISMRMRD .h5 file
+//!   info   -- print header metadata for an ISMRMRD or FastMRI .h5 file
 //!   recon  -- run a cartesian IFFT + RSS reconstruction -> PNG(s)
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use ndarray::{Array2, Axis};
 use openkspace_io::ismrmrd::IsmrmrdFile;
+use openkspace_io::{is_fastmri, FastmriFile};
 use openkspace_recon::{
-    CsRss, FftMode, GrappaRss, IfftRss, ReconStrategy, SenseMapSource, SenseRss,
+    center_crop_3d, ifft2_inplace, rss_combine_4d, CsRss, FftMode, GrappaRss, IfftRss,
+    ReconStrategy, SenseMapSource, SenseRss,
 };
 use std::path::PathBuf;
 use tracing::{info, warn};
@@ -286,9 +288,44 @@ fn main() -> Result<()> {
 }
 
 fn cmd_info(path: &PathBuf) -> Result<()> {
+    match detect_format(path)? {
+        FileFormat::Ismrmrd => cmd_info_ismrmrd(path),
+        FileFormat::FastMri => cmd_info_fastmri(path),
+    }
+}
+
+// ── Format detection ──────────────────────────────────────────────────────────
+
+enum FileFormat {
+    Ismrmrd,
+    FastMri,
+}
+
+/// Probe the HDF5 root to distinguish ISMRMRD from FastMRI.
+///
+/// ISMRMRD has `/dataset/data` (compound acquisition records).
+/// FastMRI has `/kspace` (pre-assembled complex tensor).
+/// We probe by attempting to open each in turn.
+fn detect_format(path: &PathBuf) -> Result<FileFormat> {
+    if is_fastmri(path) {
+        Ok(FileFormat::FastMri)
+    } else if IsmrmrdFile::open(path).is_ok() {
+        Ok(FileFormat::Ismrmrd)
+    } else {
+        bail!(
+            "{}: cannot determine file format (not a valid ISMRMRD or FastMRI HDF5 file)",
+            path.display()
+        )
+    }
+}
+
+// ── info ──────────────────────────────────────────────────────────────────────
+
+fn cmd_info_ismrmrd(path: &PathBuf) -> Result<()> {
     let f = IsmrmrdFile::open(path).with_context(|| format!("opening {}", path.display()))?;
     let h = &f.header;
 
+    println!("Format        : ISMRMRD");
     println!("File          : {}", path.display());
     println!("Acquisitions  : {}", f.n_acquisitions);
     println!("Vendor        : {}", h.system_vendor);
@@ -319,7 +356,44 @@ fn cmd_info(path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
+fn cmd_info_fastmri(path: &PathBuf) -> Result<()> {
+    let f = FastmriFile::open(path).with_context(|| format!("opening {}", path.display()))?;
+    let m = &f.meta;
+    let h = &m.header;
+
+    println!("Format        : FastMRI");
+    println!("File          : {}", path.display());
+    println!("Acquisition   : {}", m.acquisition);
+    println!("Patient ID    : {}", m.patient_id);
+    println!("Slices        : {}", m.n_slices);
+    println!("Coils         : {}", m.n_coils);
+    println!("Encoded matrix: {} x {}", m.n_kx, m.n_ky);
+    println!("Recon matrix  : {} x {}", m.recon_x, m.recon_y);
+    println!("Vendor        : {}", h.system_vendor);
+    println!("Model         : {}", h.system_model);
+    println!("Field [T]     : {:.3}", h.field_strength_t);
+    println!("Trajectory    : {}", h.encoding.trajectory);
+    Ok(())
+}
+
 fn cmd_probe(path: &PathBuf) -> Result<()> {
+    match detect_format(path)? {
+        FileFormat::FastMri => {
+            let f = FastmriFile::open(path)
+                .with_context(|| format!("opening {}", path.display()))?;
+            println!(
+                "FastMRI file: pre-assembled [{slices}, {coils}, {ky}, {kx}] tensor -- \
+                 no per-acquisition index to probe.",
+                slices = f.meta.n_slices,
+                coils  = f.meta.n_coils,
+                ky     = f.meta.n_ky,
+                kx     = f.meta.n_kx,
+            );
+            return Ok(());
+        }
+        FileFormat::Ismrmrd => {}
+    }
+
     let f = IsmrmrdFile::open(path).with_context(|| format!("opening {}", path.display()))?;
 
     use std::collections::{BTreeMap, BTreeSet};
@@ -465,6 +539,16 @@ fn cmd_recon(
     if !(0.0..100.0).contains(&pct_low) || !(0.0..=100.0).contains(&pct_high) || pct_high <= pct_low
     {
         bail!("invalid percentile window: [{pct_low}, {pct_high}]");
+    }
+
+    match detect_format(path)? {
+        FileFormat::FastMri => {
+            return cmd_recon_fastmri(
+                path, out_dir, slice_sel, pct_low, pct_high, no_crop,
+                strategy_arg,
+            );
+        }
+        FileFormat::Ismrmrd => {}
     }
 
     let f = IsmrmrdFile::open(path).with_context(|| format!("opening {}", path.display()))?;
@@ -658,6 +742,76 @@ fn cmd_recon(
         }
     }
 
+    Ok(())
+}
+
+/// FastMRI reconstruction: the kspace tensor is pre-assembled so we skip
+/// all ISMRMRD pre-processing (noise scans, navigators, etc.) and run
+/// IFFT + RSS directly. GRAPPA, SENSE, and CS require undersampling
+/// patterns not present in the fully-sampled multicoil training sets;
+/// those strategies fall back to ifft-rss with a warning.
+fn cmd_recon_fastmri(
+    path: &PathBuf,
+    out_dir: &PathBuf,
+    slice_sel: Option<usize>,
+    pct_low: f32,
+    pct_high: f32,
+    no_crop: bool,
+    strategy_arg: StrategyArg,
+) -> Result<()> {
+    if !matches!(strategy_arg, StrategyArg::IfftRss) {
+        warn!(
+            "Strategy {:?} is not supported for FastMRI files (fully-sampled tensors). \
+             Falling back to ifft-rss.",
+            strategy_arg
+        );
+    }
+
+    let f = FastmriFile::open(path).with_context(|| format!("opening {}", path.display()))?;
+    let m = &f.meta;
+
+    info!(
+        "FastMRI recon: {} slices, {} coils, ky={}, kx={}",
+        m.n_slices, m.n_coils, m.n_ky, m.n_kx
+    );
+
+    // Load and IFFT the full kspace tensor [coils, slices, ky, kx].
+    let mut kspace = f
+        .read_kspace()
+        .map_err(|e| anyhow::anyhow!("{e}"))
+        .context("reading kspace")?;
+
+    ifft2_inplace(&mut kspace, (2, 3));
+    let mut magnitude = rss_combine_4d(&kspace); // [slices, ky, kx]
+
+    if !no_crop && (m.recon_y != m.n_ky || m.recon_x != m.n_kx) {
+        magnitude = center_crop_3d(&magnitude, (m.n_slices, m.recon_y, m.recon_x));
+    }
+
+    let (nz, ny, nx) = magnitude.dim();
+    info!("Image volume: {} slices x {}x{}", nz, ny, nx);
+
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "recon".into());
+    let file_out_dir = out_dir.join(&stem);
+    std::fs::create_dir_all(&file_out_dir)
+        .with_context(|| format!("creating {}", file_out_dir.display()))?;
+
+    let slices: Vec<usize> = match slice_sel {
+        Some(s) if s < nz => vec![s],
+        Some(s) => bail!("slice {s} out of range (0..{nz})"),
+        None => (0..nz).collect(),
+    };
+
+    for iz in slices {
+        let slice: Array2<f32> = magnitude.index_axis(Axis(0), iz).to_owned();
+        let png_path = file_out_dir.join(format!("slice_{iz:04}.png"));
+        write_png_windowed(&slice, &png_path, pct_low, pct_high)
+            .with_context(|| format!("writing {}", png_path.display()))?;
+        info!("Wrote {}", png_path.display());
+    }
     Ok(())
 }
 
