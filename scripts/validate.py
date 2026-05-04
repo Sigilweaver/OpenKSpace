@@ -258,6 +258,23 @@ def run_openkspace(
     return im.astype(np.float32) / 255.0
 
 
+def _save_pair(
+    ref_w: np.ndarray,
+    ours_w: np.ndarray,
+    save_dir: str,
+    stem: str,
+    slice_idx: int,
+) -> None:
+    """Save windowed reference and openkspace images as PNGs."""
+    os.makedirs(save_dir, exist_ok=True)
+
+    def _to_png(arr: np.ndarray) -> Image.Image:
+        return Image.fromarray((np.clip(arr, 0.0, 1.0) * 255).astype(np.uint8), mode="L")
+
+    _to_png(ref_w).save(os.path.join(save_dir, f"{stem}_s{slice_idx:04d}_ref.png"))
+    _to_png(ours_w).save(os.path.join(save_dir, f"{stem}_s{slice_idx:04d}_ours.png"))
+
+
 def validate_one(
     h5_path: str,
     slice_idx: int,
@@ -266,6 +283,7 @@ def validate_one(
     pct_high: float,
     binary: str,
     verbose: bool,
+    save_images_dir: str | None = None,
 ) -> dict:
     """Run the full validation for one file. Returns a result dict."""
     t0 = time.monotonic()
@@ -316,6 +334,10 @@ def validate_one(
                 w = min(ref_w.shape[1], ours_w.shape[1])
                 ref_w = ref_w[:h, :w]
                 ours_w = ours_w[:h, :w]
+
+        if save_images_dir is not None:
+            stem = os.path.splitext(os.path.basename(h5_path))[0]
+            _save_pair(ref_w, ours_w, save_images_dir, stem, slice_idx)
 
         score = float(ssim(ref_w, ours_w, data_range=1.0))
         result["ssim"] = score
@@ -416,6 +438,13 @@ def main() -> int:
         action="store_true",
         help="in batch mode, continue after a FAIL/ERROR (default: true)",
     )
+    ap.add_argument(
+        "--save-images",
+        default=None,
+        metavar="DIR",
+        help="save windowed reference and openkspace PNGs to DIR "
+             "(<stem>_s<slice>_ref.png and <stem>_s<slice>_ours.png)",
+    )
     args = ap.parse_args()
 
     if not os.path.exists(args.binary):
@@ -448,6 +477,7 @@ def main() -> int:
             args.pct_high,
             args.binary,
             verbose=not batch,
+            save_images_dir=args.save_images,
         )
         results.append(r)
         if batch:
