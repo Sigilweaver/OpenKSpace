@@ -137,7 +137,7 @@ pub struct GrappaKernel {
     pub kernel_kx: usize, // number of kx taps
     pub nc: usize,
     // weights[d-1] has shape [nc_target, nc_src * kernel_ky * kernel_kx]
-    pub weights: Vec<Array2<Complex32>>,
+    pub(crate) weights: Vec<Array2<Complex32>>,
 }
 
 impl GrappaKernel {

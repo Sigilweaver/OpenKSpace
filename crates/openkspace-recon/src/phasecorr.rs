@@ -176,7 +176,7 @@ mod tests {
 
     fn mk_acq(slice: u16, segment: u16, data: &[Complex32], nc: usize) -> Acquisition {
         let ns = data.len() / nc;
-        let mut h: AcquisitionHeader = unsafe { std::mem::zeroed() };
+        let mut h = AcquisitionHeader::default();
         h.number_of_samples = ns as u16;
         h.active_channels = nc as u16;
         h.idx.slice = slice;

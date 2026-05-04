@@ -628,6 +628,15 @@ fn cmd_recon(
 
     match detect_format(path)? {
         FileFormat::FastMri => {
+            // Calibration flags have no effect on FastMRI files (fully-sampled
+            // tensor with pre-computed RSS reference); warn so users know.
+            if no_prewhiten || no_phasecorr || no_oversampling_removal || no_partial_fourier {
+                warn!(
+                    "FastMRI file detected: --no-prewhiten / --no-phasecorr / \
+                     --no-oversampling-removal / --no-partial-fourier have no effect \
+                     (FastMRI tensors do not carry calibration data)."
+                );
+            }
             return cmd_recon_fastmri(
                 path, out_dir, slice_sel, pct_low, pct_high, no_crop,
                 strategy_arg, format, verbose,
@@ -1028,7 +1037,10 @@ fn write_nifti_volume(vol: &ndarray::Array3<f32>, path: &std::path::Path) -> Res
     // sizeof_hdr = 348
     hdr[0..4].copy_from_slice(&348i32.to_le_bytes());
     // dim[0..7] at byte 40: [ndims, nx, ny, nz, 1, 1, 1, 1]
-    let dims: [i16; 8] = [3, nx as i16, ny as i16, nz as i16, 1, 1, 1, 1];
+    let nx16 = i16::try_from(nx).with_context(|| format!("NIfTI nx={nx} exceeds i16::MAX"))?;
+    let ny16 = i16::try_from(ny).with_context(|| format!("NIfTI ny={ny} exceeds i16::MAX"))?;
+    let nz16 = i16::try_from(nz).with_context(|| format!("NIfTI nz={nz} exceeds i16::MAX"))?;
+    let dims: [i16; 8] = [3, nx16, ny16, nz16, 1, 1, 1, 1];
     for (i, d) in dims.iter().enumerate() {
         hdr[40 + i * 2..40 + i * 2 + 2].copy_from_slice(&d.to_le_bytes());
     }
@@ -1083,7 +1095,7 @@ fn write_png_linear(img: &Array2<f32>, path: &std::path::Path, lo: f32, hi: f32)
             let v = img[[y, x]];
             let norm = ((v - lo) / (hi - lo)).clamp(0.0, 1.0);
             let byte = (norm * 255.0).round() as u8;
-            buf[slice_index(w, h, y, x)] = byte;
+            buf[slice_index(w, y, x)] = byte;
         }
     }
     image::save_buffer(path, &buf, w as u32, h as u32, image::ColorType::L8)?;
@@ -1113,7 +1125,7 @@ fn write_png_windowed(
             let norm = ((v - lo) / (hi - lo)).clamp(0.0, 1.0);
             // Slight gamma for perceptual brightness.
             let byte = (norm.powf(0.9) * 255.0).round() as u8;
-            buf[slice_index(w, h, y, x)] = byte;
+            buf[slice_index(w, y, x)] = byte;
         }
     }
 
@@ -1122,9 +1134,7 @@ fn write_png_windowed(
 }
 
 #[inline]
-fn slice_index(w: usize, h: usize, y: usize, x: usize) -> usize {
-    // Flip vertically so the image faces the conventional radiological orientation.
-    let _ = h;
+fn slice_index(w: usize, y: usize, x: usize) -> usize {
     y * w + x
 }
 

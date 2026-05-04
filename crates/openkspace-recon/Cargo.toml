@@ -10,7 +10,6 @@ openkspace-io = { workspace = true }
 ndarray = { workspace = true }
 num-complex = { workspace = true }
 rustfft = { workspace = true }
-rayon = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

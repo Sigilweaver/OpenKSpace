@@ -11,7 +11,7 @@ use num_complex::Complex32;
 // EncodingCounters -- packed indices within a scan
 // ---------------------------------------------------------------------------
 #[repr(C)]
-#[derive(Debug, Clone, Copy, H5Type)]
+#[derive(Debug, Clone, Copy, Default, H5Type)]
 pub struct EncodingCounters {
     pub kspace_encode_step_1: u16, // phase-encode  (ky)
     pub kspace_encode_step_2: u16, // 3D partition  (kz)
@@ -29,7 +29,7 @@ pub struct EncodingCounters {
 // AcquisitionHeader -- 340-byte fixed part of each record
 // ---------------------------------------------------------------------------
 #[repr(C)]
-#[derive(Debug, Clone, Copy, H5Type)]
+#[derive(Debug, Clone, Copy, Default, H5Type)]
 pub struct AcquisitionHeader {
     pub version: u16,
     pub flags: u64,
@@ -136,10 +136,8 @@ impl Acquisition {
         debug_assert_eq!(interleaved.len(), ns * nc * 2);
 
         let mut data = Vec::with_capacity(ns * nc);
-        let mut i = 0;
-        while i < interleaved.len() {
-            data.push(Complex32::new(interleaved[i], interleaved[i + 1]));
-            i += 2;
+        for pair in interleaved.chunks_exact(2) {
+            data.push(Complex32::new(pair[0], pair[1]));
         }
         Acquisition { header, data }
     }
