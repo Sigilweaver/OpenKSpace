@@ -264,6 +264,7 @@ def _save_pair(
     save_dir: str,
     stem: str,
     slice_idx: int,
+    save_ref: bool = True,
 ) -> None:
     """Save windowed reference and openkspace images as PNGs."""
     os.makedirs(save_dir, exist_ok=True)
@@ -271,8 +272,9 @@ def _save_pair(
     def _to_png(arr: np.ndarray) -> Image.Image:
         return Image.fromarray((np.clip(arr, 0.0, 1.0) * 255).astype(np.uint8), mode="L")
 
-    _to_png(ref_w).save(os.path.join(save_dir, f"{stem}_s{slice_idx:04d}_ref.png"))
     _to_png(ours_w).save(os.path.join(save_dir, f"{stem}_s{slice_idx:04d}_ours.png"))
+    if save_ref:
+        _to_png(ref_w).save(os.path.join(save_dir, f"{stem}_s{slice_idx:04d}_ref.png"))
 
 
 def validate_one(
@@ -335,13 +337,14 @@ def validate_one(
                 ref_w = ref_w[:h, :w]
                 ours_w = ours_w[:h, :w]
 
-        if save_images_dir is not None:
-            stem = os.path.splitext(os.path.basename(h5_path))[0]
-            _save_pair(ref_w, ours_w, save_images_dir, stem, slice_idx)
-
         score = float(ssim(ref_w, ours_w, data_range=1.0))
         result["ssim"] = score
         result["status"] = "PASS" if score >= threshold else "FAIL"
+
+        if save_images_dir is not None:
+            stem = os.path.splitext(os.path.basename(h5_path))[0]
+            _save_pair(ref_w, ours_w, save_images_dir, stem, slice_idx,
+                       save_ref=(score < 1.0))
     except subprocess.CalledProcessError as e:
         result["error"] = f"openkspace failed: rc={e.returncode}"
     except Exception as e:  # noqa: BLE001
