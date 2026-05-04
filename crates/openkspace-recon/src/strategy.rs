@@ -367,7 +367,7 @@ impl ReconStrategy for GrappaRss {
                             // by slicing along axis 1 and call synthesize.
                             let mut slice_view = kspace.slice_mut(s![.., kz..=kz, .., ..]);
                             let mut slice_owned = slice_view.to_owned();
-                            kernel.synthesize(&mut slice_owned, &pattern);
+                            kernel.synthesize(&mut slice_owned);
                             slice_view.assign(&slice_owned);
                         }
                         Err(e) => {

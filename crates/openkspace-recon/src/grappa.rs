@@ -300,13 +300,15 @@ impl GrappaKernel {
         })
     }
 
-    /// Synthesize missing lines in `kspace[nc, kz, ky, kx]` given the
-    /// detected sampling pattern. Per-slice: for each pair of sampled
-    /// ky rows separated by exactly `R`, fill in the `R-1` lines between.
+    /// Synthesize missing lines in `kspace[nc, kz, ky, kx]`.
+    /// Per-slice: for each pair of sampled ky rows separated by exactly `R`,
+    /// fill in the `R-1` lines between.
     ///
     /// The ACS region itself is already fully sampled and left untouched.
-    pub fn synthesize(&self, kspace: &mut Array4<Complex32>, pattern: &SamplingPattern) {
-        let _ = pattern; // pattern is implicit in the sampled mask (detected per slice)
+    /// Edges within `kernel_kx / 2` columns of the kx boundary cannot be
+    /// filled (the source window would extend outside the array) and are left
+    /// zero.
+    pub fn synthesize(&self, kspace: &mut Array4<Complex32>) {
         let (nc, nz, ny, nx) = (
             kspace.shape()[0],
             kspace.shape()[1],
@@ -647,7 +649,7 @@ mod tests {
             ky_lo: 0,
             ky_hi: ny - 1,
         };
-        kernel.synthesize(&mut us, &pattern);
+        kernel.synthesize(&mut us);
 
         // Check filled rows match truth to within a reasonable tolerance
         // on the central kx region. Boundary rows where the kernel has no
