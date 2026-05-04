@@ -33,8 +33,9 @@ pub struct SamplingPattern {
     pub acs_start: usize,
     /// Exclusive end of the ACS block.
     pub acs_end: usize,
-    /// ky range that actually carries any data (outside is all-zero).
+    /// First ky index that carries any data (outside is all-zero).
     pub ky_lo: usize,
+    /// Last ky index (inclusive) that carries any data.
     pub ky_hi: usize,
 }
 
@@ -133,9 +134,14 @@ impl SamplingPattern {
 /// For each target coil `c_t` and each missing offset `d \in 1..R`, stores
 /// a complex weight vector over all source samples in the neighbourhood.
 pub struct GrappaKernel {
+    /// Acceleration factor (number of missing lines per period).
     pub r: usize,
-    pub kernel_ky: usize, // number of sampled source rows
-    pub kernel_kx: usize, // number of kx taps
+    /// Number of calibrated source ky rows (even, >= 2).
+    pub kernel_ky: usize,
+    /// Number of kx taps (odd, >= 1). Columns within `kernel_kx/2` of either
+    /// boundary are not synthesized (the source window cannot be centered there).
+    pub kernel_kx: usize,
+    /// Coil count this kernel was calibrated for.
     pub nc: usize,
     // weights[d-1] has shape [nc_target, nc_src * kernel_ky * kernel_kx]
     pub(crate) weights: Vec<Array2<Complex32>>,

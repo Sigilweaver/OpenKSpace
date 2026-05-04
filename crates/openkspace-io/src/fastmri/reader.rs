@@ -265,7 +265,13 @@ impl FastmriFile {
             .map_err(|e| IoError::Inconsistent(e.to_string()))
     }
 
-    /// `true` if this file appears to be a brain scan based on acquisition label.
+    /// Returns `true` if the acquisition label heuristically indicates a brain scan.
+    ///
+    /// The heuristic checks whether the label (e.g. `"AXT2"`, `"AXFLAIR"`) contains
+    /// the substring `"AX"` (axial) after upper-casing. Brain FastMRI acquisitions
+    /// are typically labelled with axial plane prefixes; knee acquisitions use
+    /// coronal (`"COR"`) or sagittal (`"SAG"`) prefixes. This is a best-effort
+    /// heuristic -- files with non-standard labels may be misclassified.
     pub fn is_brain(&self) -> bool {
         self.meta.acquisition.to_ascii_uppercase().contains("AX")
     }

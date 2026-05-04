@@ -10,6 +10,20 @@
 //! Reconstructions are composed behind the [`ReconStrategy`] trait so that
 //! future parallel-imaging / compressed-sensing back-ends can slot in
 //! without touching this crate's public shape.
+//!
+//! # Quick start
+//!
+//! ```rust,no_run
+//! use openkspace_recon::{IfftRss, ReconStrategy};
+//! use openkspace_io::ismrmrd::IsmrmrdFile;
+//!
+//! let file = IsmrmrdFile::open("scan.h5").unwrap();
+//! let mut strategy = IfftRss::default();
+//! strategy.prewhiten = true;
+//! strategy.phase_correct = true;
+//! let volume = strategy.reconstruct(&file).unwrap();
+//! println!("Reconstructed {} slices", volume.magnitude.shape()[0]);
+//! ```
 
 pub mod coil;
 pub mod crop;

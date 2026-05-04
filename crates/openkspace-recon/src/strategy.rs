@@ -45,6 +45,16 @@ impl ImageVolume {
 }
 
 /// Reconstruction strategy: k-space -> magnitude image.
+///
+/// # Design note
+///
+/// The trait takes an [`IsmrmrdFile`] rather than an abstract "k-space source"
+/// because all implemented strategies require calibration data (noise
+/// measurements, phase-correction navigators, ACS lines) that are carried by
+/// the ISMRMRD container. FastMRI files are fully-sampled, pre-coil-combined
+/// tensors and are handled by a separate, simpler path in the CLI
+/// (`cmd_recon_fastmri`). A generic trait over an abstract reader is planned
+/// for v0.2 once the set of supported formats stabilises.
 pub trait ReconStrategy {
     /// A human-readable identifier (used in logs & output filenames).
     fn name(&self) -> &'static str;

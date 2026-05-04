@@ -36,7 +36,8 @@ reconstructions decouple along kz via a 1-D IFFT, reducing the problem
 to independent per-slice unfolds.
 
 ### Output
-- PNG image output with percentile contrast windowing
+- PNG image output with percentile contrast windowing (default)
+- NIfTI-1 single-file volume (`.nii`) for downstream analysis tools; select with `--format nifti` or `--format both`
 - Optional g-factor PNG output for SENSE (linear window `[1, p99]`)
 
 ## Usage
@@ -55,6 +56,7 @@ openkspace recon <file.h5>                   # reconstruct all slices -> recon_o
     [--no-partial-fourier]                   # skip homodyne
     [--no-crop]                              # keep full oversampled FOV
     [--pct-low <f>] [--pct-high <f>]         # contrast window percentiles
+    [--format png|nifti|both]                # output format (default: png)
 
   GRAPPA:
     [--grappa-kernel-ky <k>] [--grappa-kernel-kx <k>]
