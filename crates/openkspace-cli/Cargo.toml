@@ -4,6 +4,8 @@ version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 description = "Command-line interface for OpenKSpace MRI reconstruction engine."
+keywords = ["mri", "reconstruction", "cli", "medical-imaging"]
+categories = ["command-line-utilities", "science"]
 
 [[bin]]
 name = "openkspace"

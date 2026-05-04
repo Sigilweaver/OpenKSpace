@@ -1,7 +1,12 @@
 # OpenKSpace
 
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Rust MSRV](https://img.shields.io/badge/rust-1.75+-orange.svg)](https://www.rust-lang.org)
+
 A Rust library and CLI for Cartesian MRI k-space reconstruction from
 [ISMRMRD](https://ismrmrd.github.io/) `.h5` files.
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## Features
 
