@@ -1,0 +1,16 @@
+[project]
+name = "openkspace-scripts"
+version = "0.1.0"
+description = "Developer validation scripts for OpenKSpace"
+requires-python = ">=3.11"
+dependencies = [
+    "h5py>=3.10",
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "scikit-image>=0.22",
+]
+
+[tool.uv]
+# Scripts are run from the repo root: `uv run --project scripts scripts/validate.py`
+# or from within scripts/: `uv run validate.py`
+package = false

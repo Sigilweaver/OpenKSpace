@@ -12,18 +12,24 @@ to both, and reports the structural similarity index (SSIM).
 
 ### Requirements
 
-```sh
-pip install numpy h5py pillow scikit-image
-```
+Dependencies are declared in `scripts/pyproject.toml` and managed by
+[uv](https://docs.astral.sh/uv/). The first run creates `scripts/.venv`
+automatically - no manual install step needed.
+
+If you do not have uv: `pip install h5py numpy pillow scikit-image`
 
 ### Usage
 
 ```sh
-# via the wrapper (builds the release binary if needed)
+# via the wrapper (builds the release binary if missing, handles venv)
 ./scripts/validate.sh path/to/file.h5 --slice 15
 
-# or directly
-python scripts/validate.py path/to/file.h5 --slice 15 --threshold 0.95
+# directly with uv (from repo root)
+uv run --project scripts scripts/validate.py path/to/file.h5 --slice 15
+
+# all slices, save images
+uv run --project scripts scripts/validate.py path/to/file.h5 \
+    --all-slices --save-images recon_out/images/
 ```
 
 Exit codes:

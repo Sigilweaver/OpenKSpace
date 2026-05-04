@@ -9,12 +9,11 @@
 # any file fails the SSIM threshold.
 #
 # Environment:
-#   PYTHON     - python interpreter (default: python3)
 #   BINARY     - openkspace CLI path (default: ./target/release/openkspace)
+# Python dependencies are managed via scripts/pyproject.toml (uv).
 
 set -euo pipefail
 
-PYTHON="${PYTHON:-python3}"
 BINARY="${BINARY:-./target/release/openkspace}"
 
 if [[ ! -x "$BINARY" ]]; then
@@ -24,4 +23,4 @@ if [[ ! -x "$BINARY" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec "$PYTHON" "$SCRIPT_DIR/validate.py" --binary "$BINARY" "$@"
+exec uv run --project "$SCRIPT_DIR" "$SCRIPT_DIR/validate.py" --binary "$BINARY" "$@"
