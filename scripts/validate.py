@@ -266,15 +266,16 @@ def _save_pair(
     slice_idx: int,
     save_ref: bool = True,
 ) -> None:
-    """Save windowed reference and openkspace images as PNGs."""
-    os.makedirs(save_dir, exist_ok=True)
+    """Save windowed images into save_dir/<stem>/."""
+    subdir = os.path.join(save_dir, stem)
+    os.makedirs(subdir, exist_ok=True)
 
     def _to_png(arr: np.ndarray) -> Image.Image:
         return Image.fromarray((np.clip(arr, 0.0, 1.0) * 255).astype(np.uint8), mode="L")
 
-    _to_png(ours_w).save(os.path.join(save_dir, f"{stem}_s{slice_idx:04d}_ours.png"))
+    _to_png(ours_w).save(os.path.join(subdir, f"slice_{slice_idx:04d}_ours.png"))
     if save_ref:
-        _to_png(ref_w).save(os.path.join(save_dir, f"{stem}_s{slice_idx:04d}_ref.png"))
+        _to_png(ref_w).save(os.path.join(subdir, f"slice_{slice_idx:04d}_ref.png"))
 
 
 def validate_one(
@@ -344,7 +345,7 @@ def validate_one(
         if save_images_dir is not None:
             stem = os.path.splitext(os.path.basename(h5_path))[0]
             _save_pair(ref_w, ours_w, save_images_dir, stem, slice_idx,
-                       save_ref=(score < 1.0))
+                       save_ref=(score < 0.9999))
     except subprocess.CalledProcessError as e:
         result["error"] = f"openkspace failed: rc={e.returncode}"
     except Exception as e:  # noqa: BLE001
@@ -352,6 +353,24 @@ def validate_one(
     result["elapsed_s"] = time.monotonic() - t0
     return result
 
+
+
+def _n_slices(h5_path: str) -> int:
+    """Return the number of slices in a file without loading kspace data."""
+    with h5py.File(h5_path, "r") as f:
+        if "kspace" in f:
+            return int(f["kspace"].shape[0])
+        # ISMRMRD: scan unique slice indices
+        d = f["dataset/data"]
+        slices: set[int] = set()
+        for i in range(len(d)):
+            row = d[i]
+            h = row["head"]
+            flags = int(h["flags"])
+            if flags & _NON_IMAGE_MASK:
+                continue
+            slices.add(int(h["idx"]["slice"]))
+        return len(slices) if slices else 1
 
 
 def _discover_inputs(paths: list[str]) -> list[str]:
@@ -413,7 +432,12 @@ def main() -> int:
         nargs="+",
         help="one or more .h5 files (ISMRMRD or FastMRI), or directories to recurse into",
     )
-    ap.add_argument("--slice", type=int, default=0, help="slice index to compare")
+    ap.add_argument("--slice", type=int, default=0, help="slice index to compare (ignored with --all-slices)")
+    ap.add_argument(
+        "--all-slices",
+        action="store_true",
+        help="validate every slice in each file instead of a single --slice",
+    )
     ap.add_argument(
         "--threshold",
         type=float,
@@ -445,8 +469,8 @@ def main() -> int:
         "--save-images",
         default=None,
         metavar="DIR",
-        help="save windowed reference and openkspace PNGs to DIR "
-             "(<stem>_s<slice>_ref.png and <stem>_s<slice>_ours.png)",
+        help="save windowed PNGs to DIR/<stem>/slice_NNNN_ours.png; "
+             "ref only saved when output differs (ssim < 1.0)",
     )
     args = ap.parse_args()
 
@@ -470,32 +494,46 @@ def main() -> int:
     batch = len(files) > 1 or os.path.isdir(args.inputs[0])
     results: list[dict] = []
     for i, path in enumerate(files, 1):
-        if batch:
-            print(f"[{i}/{len(files)}] {path}", flush=True)
-        r = validate_one(
-            path,
-            args.slice,
-            args.threshold,
-            args.pct_low,
-            args.pct_high,
-            args.binary,
-            verbose=not batch,
-            save_images_dir=args.save_images,
-        )
-        results.append(r)
-        if batch:
-            ssim_str = f"{r['ssim']:.4f}" if r["ssim"] is not None else "n/a"
-            err = f" ({r['error']})" if r["error"] else ""
-            print(f"    -> {r['status']}  ssim={ssim_str}{err}", flush=True)
+        slices: list[int]
+        if args.all_slices:
+            try:
+                n = _n_slices(path)
+            except Exception as e:
+                print(f"  warning: could not determine slice count for {path}: {e}", file=sys.stderr)
+                n = 1
+            slices = list(range(n))
         else:
-            if r["ssim"] is not None:
-                print(f"SSIM                            : {r['ssim']:.4f}")
-            print(f"Threshold                       : {args.threshold:.4f}")
-            print(f"Format                          : {r.get('format', '?')}")
-            print(f"File                            : {os.path.basename(r['file'])}")
-            if r["error"]:
-                print(f"ERROR                           : {r['error']}")
-            print(f"RESULT                          : {r['status']}")
+            slices = [args.slice]
+
+        if batch:
+            slice_desc = f"all {len(slices)} slices" if args.all_slices else f"slice {args.slice}"
+            print(f"[{i}/{len(files)}] {path}  ({slice_desc})", flush=True)
+
+        for s in slices:
+            r = validate_one(
+                path,
+                s,
+                args.threshold,
+                args.pct_low,
+                args.pct_high,
+                args.binary,
+                verbose=(not batch and len(slices) == 1),
+                save_images_dir=args.save_images,
+            )
+            results.append(r)
+            if batch or len(slices) > 1:
+                ssim_str = f"{r['ssim']:.4f}" if r["ssim"] is not None else "n/a"
+                err = f" ({r['error']})" if r["error"] else ""
+                print(f"    slice {s:>4}  -> {r['status']}  ssim={ssim_str}{err}", flush=True)
+            else:
+                if r["ssim"] is not None:
+                    print(f"SSIM                            : {r['ssim']:.4f}")
+                print(f"Threshold                       : {args.threshold:.4f}")
+                print(f"Format                          : {r.get('format', '?')}")
+                print(f"File                            : {os.path.basename(r['file'])}")
+                if r["error"]:
+                    print(f"ERROR                           : {r['error']}")
+                print(f"RESULT                          : {r['status']}")
 
     if batch:
         print()
