@@ -29,15 +29,15 @@ pub mod wavelet;
 
 pub use coil::{rss_combine, rss_combine_4d};
 pub use crop::center_crop_3d;
-pub use cs::fista_cs_single_coil;
+pub use cs::{fista_cs_single_coil, CsError};
 pub use espirit::espirit_sensitivity_maps;
 pub use fft::{ifft1_inplace, ifft2_inplace, ifft3_inplace};
-pub use grappa::{GrappaKernel, SamplingPattern};
+pub use grappa::{GrappaError, GrappaKernel, SamplingPattern};
 pub use oversampling::OversamplingRemover;
 pub use partial_fourier::{homodyne_reconstruct, PartialFourierPlan};
 pub use phasecorr::PhaseCorrector;
 pub use prewhiten::NoisePrewhitener;
-pub use sense::sense_unfold_1d;
+pub use sense::{sense_gfactor_1d, sense_unfold_1d, SenseError};
 pub use sensitivity::walsh_sensitivity_maps;
 pub use shift::{fftshift_axis, ifftshift_axis};
 pub use strategy::{

@@ -309,14 +309,16 @@ impl GrappaKernel {
     /// Edges within `kernel_kx / 2` columns of the kx boundary cannot be
     /// filled (the source window would extend outside the array) and are left
     /// zero.
-    pub fn synthesize(&self, kspace: &mut Array4<Complex32>) {
+    pub fn synthesize(&self, kspace: &mut Array4<Complex32>) -> Result<(), GrappaError> {
         let (nc, nz, ny, nx) = (
             kspace.shape()[0],
             kspace.shape()[1],
             kspace.shape()[2],
             kspace.shape()[3],
         );
-        assert_eq!(nc, self.nc, "coil count mismatch");
+        if nc != self.nc {
+            return Err(GrappaError::BadConfig("coil count mismatch between kernel and kspace"));
+        }
         let r = self.r;
         let kx_half = self.kernel_kx / 2;
         let kky_center = self.kernel_ky / 2 - 1;
@@ -410,6 +412,7 @@ impl GrappaKernel {
             }
             debug!("GRAPPA synth: slice {} filled {} targets", kz, filled);
         }
+        Ok(())
     }
 }
 
@@ -644,14 +647,14 @@ mod tests {
                 }
             }
         }
-        let pattern = SamplingPattern {
+        let _pattern = SamplingPattern {
             r: 2,
             acs_start,
             acs_end,
             ky_lo: 0,
             ky_hi: ny - 1,
         };
-        kernel.synthesize(&mut us);
+        kernel.synthesize(&mut us).expect("synthesize failed");
 
         // Check filled rows match truth to within a reasonable tolerance
         // on the central kx region. Boundary rows where the kernel has no

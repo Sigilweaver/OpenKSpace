@@ -32,6 +32,18 @@ use num_complex::Complex32;
 
 use crate::prewhiten::{cholesky_lower, invert_lower_triangular};
 
+/// Errors returned by SENSE unfolding.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum SenseError {
+    #[error("SENSE: acceleration factor must be >= 1")]
+    BadAcceleration,
+    #[error("SENSE: aliased and map shapes do not match ({aliased:?} vs {maps:?})")]
+    ShapeMismatch { aliased: (usize, usize, usize), maps: (usize, usize, usize) },
+    #[error("SENSE: Ny ({ny}) must be divisible by R ({r})")]
+    IndivisibleNy { ny: usize, r: usize },
+}
+
 /// Unfold an aliased coil-image stack along axis 1 using SENSE.
 ///
 /// * `aliased`: shape `[Nc, Ny, Nx]` - complex coil images after IFFT
@@ -51,25 +63,22 @@ pub fn sense_unfold_1d(
     maps: &Array3<Complex32>,
     r: usize,
     ridge: f32,
-) -> Array2<Complex32> {
+) -> Result<Array2<Complex32>, SenseError> {
     let (nc, ny, nx) = aliased.dim();
-    assert!(r >= 1, "SENSE: acceleration factor must be >= 1");
-    assert_eq!(
-        maps.dim(),
-        (nc, ny, nx),
-        "SENSE: map/aliased shape mismatch"
-    );
-    assert!(
-        ny % r == 0,
-        "SENSE: Ny ({}) must be divisible by R ({})",
-        ny,
-        r
-    );
+    if r < 1 {
+        return Err(SenseError::BadAcceleration);
+    }
+    if maps.dim() != (nc, ny, nx) {
+        return Err(SenseError::ShapeMismatch { aliased: aliased.dim(), maps: maps.dim() });
+    }
+    if ny % r != 0 {
+        return Err(SenseError::IndivisibleNy { ny, r });
+    }
     let ny_red = ny / r;
 
     let mut out = Array2::<Complex32>::zeros((ny, nx));
     if nc == 0 || nx == 0 || ny_red == 0 {
-        return out;
+        return Ok(out);
     }
 
     // Pre-allocated scratch for the NcxR SENSE system.
@@ -143,7 +152,7 @@ pub fn sense_unfold_1d(
             }
         }
     }
-    out
+    Ok(out)
 }
 
 /// Compute the SENSE geometry-factor (g-factor) map for the same
@@ -163,14 +172,18 @@ pub fn sense_unfold_1d(
 /// unfold. To keep numerics tractable we use the same Tikhonov
 /// ridge as the unfold solver; the result is therefore a practical
 /// (mildly regularised) g-factor rather than the noise-exact value.
-pub fn sense_gfactor_1d(maps: &Array3<Complex32>, r: usize, ridge: f32) -> Array2<f32> {
+pub fn sense_gfactor_1d(maps: &Array3<Complex32>, r: usize, ridge: f32) -> Result<Array2<f32>, SenseError> {
     let (nc, ny, nx) = maps.dim();
-    assert!(r >= 1);
-    assert!(ny % r == 0);
+    if r < 1 {
+        return Err(SenseError::BadAcceleration);
+    }
+    if ny % r != 0 {
+        return Err(SenseError::IndivisibleNy { ny, r });
+    }
     let ny_red = ny / r;
     let mut g = Array2::<f32>::zeros((ny, nx));
     if nc == 0 || nx == 0 || ny_red == 0 {
-        return g;
+        return Ok(g);
     }
 
     let mut c_mat = Array2::<Complex32>::zeros((nc, r));
@@ -216,7 +229,7 @@ pub fn sense_gfactor_1d(maps: &Array3<Complex32>, r: usize, ridge: f32) -> Array
             }
         }
     }
-    g
+    Ok(g)
 }
 
 #[cfg(test)]
@@ -318,7 +331,7 @@ mod tests {
         );
 
         // 5. SENSE unfold.
-        let out = sense_unfold_1d(&aliased, &maps, r, 1e-5);
+        let out = sense_unfold_1d(&aliased, &maps, r, 1e-5).expect("sense_unfold_1d failed");
 
         // 6. Compute NRMSE vs truth (magnitudes).
         let mut num = 0.0f32;
@@ -355,7 +368,7 @@ mod tests {
                 }
             }
         }
-        let out = sense_unfold_1d(&aliased, &maps, 1, 0.0);
+        let out = sense_unfold_1d(&aliased, &maps, 1, 0.0).expect("r1 passthrough failed");
         // With S_c = 1 for all coils, R=1, ridge=0:
         //   rho = (sum_c 1) a_c / (sum_c 1) = mean(a_c) ... not exactly;
         //   (C^H C)^-1 C^H a = (nc)^-1 * sum_c a_c
@@ -392,10 +405,16 @@ mod tests {
                 }
             }
         }
-        let g = sense_gfactor_1d(&maps, 1, 0.0);
+        let g = sense_gfactor_1d(&maps, 1, 0.0).expect("gfactor r1 failed");
         for y in 0..ny {
             for x in 0..nx {
-                assert!((g[[y, x]] - 1.0).abs() < 1e-4, "g={}", g[[y, x]]);
+                assert!(
+                    (g[[y, x]] - 1.0).abs() < 1e-4,
+                    "g[{},{}]={}",
+                    y,
+                    x,
+                    g[[y, x]]
+                );
             }
         }
     }
@@ -418,7 +437,7 @@ mod tests {
                 maps[[1, y, x]] = Complex32::new(1.0, 0.0);
             }
         }
-        let g = sense_gfactor_1d(&maps, 2, 0.0);
+        let g = sense_gfactor_1d(&maps, 2, 0.0).expect("gfactor r2 failed");
         for y in 0..ny {
             for x in 0..nx {
                 assert!(

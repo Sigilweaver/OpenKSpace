@@ -17,7 +17,7 @@ use crate::partial_fourier::{homodyne_reconstruct, PartialFourierPlan};
 use crate::phasecorr::PhaseCorrector;
 use crate::prewhiten::NoisePrewhitener;
 use ndarray::Array3;
-use openkspace_io::error::IoResult;
+use openkspace_io::error::{IoError, IoResult};
 use openkspace_io::ismrmrd::IsmrmrdFile;
 use tracing::info;
 
@@ -370,8 +370,11 @@ impl ReconStrategy for GrappaRss {
                             // by slicing along axis 1 and call synthesize.
                             let mut slice_view = kspace.slice_mut(s![.., kz..=kz, .., ..]);
                             let mut slice_owned = slice_view.to_owned();
-                            kernel.synthesize(&mut slice_owned);
-                            slice_view.assign(&slice_owned);
+                            if let Err(e) = kernel.synthesize(&mut slice_owned) {
+                                warn!("GRAPPA synthesize failed on slice {}: {}", kz, e);
+                            } else {
+                                slice_view.assign(&slice_owned);
+                            }
                         }
                         Err(e) => {
                             warn!(
@@ -684,14 +687,16 @@ impl ReconStrategy for SenseRss {
             ifft2_inplace(&mut aliased_k, (2, 3));
             let aliased = aliased_k.index_axis(Axis(1), 0).to_owned();
 
-            let unfolded = sense_unfold_1d(&aliased, &maps, pattern.r, self.ridge);
+            let unfolded = sense_unfold_1d(&aliased, &maps, pattern.r, self.ridge)
+                .map_err(|e| IoError::Inconsistent(e.to_string()))?;
             for y in 0..ny {
                 for x in 0..nx {
                     output[[kz, y, x]] = unfolded[[y, x]].norm();
                 }
             }
             if let Some(gv) = gfactor_vol.as_mut() {
-                let gslice = crate::sense::sense_gfactor_1d(&maps, pattern.r, self.ridge);
+                let gslice = crate::sense::sense_gfactor_1d(&maps, pattern.r, self.ridge)
+                    .map_err(|e| IoError::Inconsistent(e.to_string()))?;
                 for y in 0..ny {
                     for x in 0..nx {
                         gv[[kz, y, x]] = gslice[[y, x]];
@@ -848,7 +853,8 @@ impl ReconStrategy for CsRss {
                         kzf[[y, x]] = kspace[[c, kz, y, x]];
                     }
                 }
-                let recon = fista_cs_single_coil(&kzf, &mask2, self.iters, self.lambda);
+                let recon = fista_cs_single_coil(&kzf, &mask2, self.iters, self.lambda)
+                    .map_err(|e| IoError::Inconsistent(e.to_string()))?;
                 coil_imgs.push(recon);
             }
             for y in 0..ny {

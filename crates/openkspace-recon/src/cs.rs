@@ -37,6 +37,16 @@ use rustfft::FftPlanner;
 use crate::shift::{fftshift_axis, ifftshift_axis};
 use crate::wavelet::{haar_forward, haar_inverse, soft_threshold_details};
 
+/// Errors returned by the CS solver.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum CsError {
+    #[error("CS: mask shape {mask:?} does not match kspace shape {kspace:?}")]
+    ShapeMismatch { kspace: (usize, usize), mask: (usize, usize) },
+    #[error("CS: Ny ({ny}) and Nx ({nx}) must both be even for Haar wavelet")]
+    OddDimension { ny: usize, nx: usize },
+}
+
 /// Reconstruct one coil's image from zero-filled k-space + sampling mask
 /// using `iters` FISTA iterations at regularisation weight `lambda`.
 ///
@@ -48,10 +58,14 @@ pub fn fista_cs_single_coil(
     mask: &Array2<bool>,
     iters: usize,
     lambda: f32,
-) -> Array2<Complex32> {
+) -> Result<Array2<Complex32>, CsError> {
     let (ny, nx) = kspace_zf.dim();
-    assert_eq!(mask.dim(), (ny, nx));
-    assert!(ny % 2 == 0 && nx % 2 == 0, "CS: dims must be even for Haar");
+    if mask.dim() != (ny, nx) {
+        return Err(CsError::ShapeMismatch { kspace: (ny, nx), mask: mask.dim() });
+    }
+    if ny % 2 != 0 || nx % 2 != 0 {
+        return Err(CsError::OddDimension { ny, nx });
+    }
 
     let mut planner = FftPlanner::<f32>::new();
     let fft_x = planner.plan_fft_forward(nx);
@@ -115,7 +129,7 @@ pub fn fista_cs_single_coil(
         z = z_new;
         t = t_new;
     }
-    x
+    Ok(x)
 }
 
 fn centred_fft2(
@@ -284,11 +298,11 @@ mod tests {
             .sum::<f32>()
             .sqrt();
 
-        let recon = fista_cs_single_coil(&kzf, &mask, 200, 0.02);
+        let recon = fista_cs_single_coil(&kzf, &mask, 200, 0.02).expect("CS failed");
         let cs_err: f32 = recon
             .iter()
             .zip(truth.iter())
-            .map(|(a, b)| (*a - *b).norm_sqr())
+            .map(|(a, b)| (a - b).norm_sqr())
             .sum::<f32>()
             .sqrt();
 
