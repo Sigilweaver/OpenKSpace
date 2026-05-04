@@ -1141,3 +1141,45 @@ fn percentile(sorted: &[f32], pct: f32) -> f32 {
     let k = ((pct / 100.0) * (sorted.len() - 1) as f32).round() as usize;
     sorted[k.min(sorted.len() - 1)]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ndarray::Array3;
+
+    /// Write a small synthetic volume as NIfTI-1 (.nii) and read the
+    /// header back to verify dims, datatype, magic, and vox_offset.
+    #[test]
+    fn nifti_round_trip_header() {
+        let vol: Array3<f32> = Array3::from_elem((4, 8, 16), 1.0f32);
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("test.nii");
+        write_nifti_volume(&vol, &path).expect("write_nifti_volume failed");
+
+        let bytes = std::fs::read(&path).expect("read .nii");
+        // sizeof_hdr at byte 0
+        let sizeof_hdr = i32::from_le_bytes(bytes[0..4].try_into().unwrap());
+        assert_eq!(sizeof_hdr, 348, "sizeof_hdr");
+        // ndims at byte 40
+        let ndims = i16::from_le_bytes(bytes[40..42].try_into().unwrap());
+        assert_eq!(ndims, 3, "ndims");
+        // dim[1..3] = nx, ny, nz (Fortran order: input [nz=4, ny=8, nx=16])
+        let nx = i16::from_le_bytes(bytes[42..44].try_into().unwrap());
+        let ny = i16::from_le_bytes(bytes[44..46].try_into().unwrap());
+        let nz = i16::from_le_bytes(bytes[46..48].try_into().unwrap());
+        assert_eq!(nx, 16);
+        assert_eq!(ny, 8);
+        assert_eq!(nz, 4);
+        // datatype = 16 (DT_FLOAT32) at byte 70
+        let datatype = i16::from_le_bytes(bytes[70..72].try_into().unwrap());
+        assert_eq!(datatype, 16, "datatype");
+        // vox_offset = 352.0 at byte 108
+        let vox_offset = f32::from_le_bytes(bytes[108..112].try_into().unwrap());
+        assert!((vox_offset - 352.0).abs() < 1e-6, "vox_offset={}", vox_offset);
+        // magic = "n+1\0" at byte 344
+        assert_eq!(&bytes[344..348], b"n+1\0", "magic");
+        // Total file size: 348 header + 4 extension + nz*ny*nx * 4 bytes
+        let expected = 352 + 4 * 8 * 16 * 4;
+        assert_eq!(bytes.len(), expected, "file size");
+    }
+}

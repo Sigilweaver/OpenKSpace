@@ -450,4 +450,31 @@ mod tests {
             }
         }
     }
+
+    /// Single-coil (nc=1) SENSE at R=1 must return the aliased values
+    /// unchanged (the 1x1 system is trivially solved: rho = aliased / S_c).
+    #[test]
+    fn sense_nc1_r1_passthrough() {
+        let nc = 1;
+        let ny = 8;
+        let nx = 6;
+        let mut maps = Array3::<Complex32>::zeros((nc, ny, nx));
+        let mut aliased = Array3::<Complex32>::zeros((nc, ny, nx));
+        for y in 0..ny {
+            for x in 0..nx {
+                let s = (1.0 + y as f32 * 0.1).sqrt();
+                maps[[0, y, x]] = Complex32::new(s, 0.0);
+                aliased[[0, y, x]] = Complex32::new(s * (y as f32 + x as f32), 0.0);
+            }
+        }
+        let out = sense_unfold_1d(&aliased, &maps, 1, 0.0).expect("nc=1 r=1 failed");
+        for y in 0..ny {
+            for x in 0..nx {
+                let s = maps[[0, y, x]];
+                let want = aliased[[0, y, x]] / s;
+                let err = (out[[y, x]] - want).norm();
+                assert!(err < 1e-4, "nc=1 r=1 err={} at ({},{})", err, y, x);
+            }
+        }
+    }
 }

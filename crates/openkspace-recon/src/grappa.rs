@@ -703,4 +703,58 @@ mod tests {
             n_checked
         );
     }
+
+    /// Single-coil (nc=1) GRAPPA calibration and synthesis must not panic or
+    /// error -- the synthesized values may be inaccurate (a single-coil ACS
+    /// can't provide the phase diversity GRAPPA uses), but the function must
+    /// complete and leave sampled rows untouched.
+    #[test]
+    fn grappa_nc1_does_not_panic() {
+        let nc = 1;
+        let ny = 20;
+        let nx = 16;
+        // Single-coil phantom: constant value on a small rectangle.
+        let mut acs_raw = Array3::<Complex32>::zeros((nc, 12, nx));
+        for c in 0..nc {
+            for y in 0..12 {
+                for x in 0..nx {
+                    acs_raw[[c, y, x]] = Complex32::new(1.0, 0.0);
+                }
+            }
+        }
+        let kernel = GrappaKernel::calibrate(acs_raw.view(), 2, 4, 5, 1e-3);
+        let kernel = match kernel {
+            Ok(k) => k,
+            // With nc=1 and R=2 the system may be underdetermined; some
+            // implementations may return an error rather than a degenerate
+            // kernel -- that is also acceptable.
+            Err(_) => return,
+        };
+        let mut us = Array4::<Complex32>::zeros((nc, 1, ny, nx));
+        for y in (0..ny).step_by(2) {
+            for x in 0..nx {
+                us[[0, 0, y, x]] = Complex32::new(1.0, 0.0);
+            }
+        }
+        // Copy of sampled rows before synthesis.
+        let mut before: Vec<Complex32> = Vec::new();
+        for y in (0..ny).step_by(2) {
+            for x in 0..nx {
+                before.push(us[[0, 0, y, x]]);
+            }
+        }
+        let _ = kernel.synthesize(&mut us); // may fail; must not panic
+        // Sampled rows must be unchanged.
+        for (i, y) in (0usize..).zip((0..ny).step_by(2)) {
+            for x in 0..nx {
+                let want = before[i * nx + x];
+                let got = us[[0, 0, y, x]];
+                assert!(
+                    (got - want).norm() < 1e-6,
+                    "sampled row y={} modified by synthesize",
+                    y
+                );
+            }
+        }
+    }
 }

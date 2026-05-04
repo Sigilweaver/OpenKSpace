@@ -22,7 +22,7 @@
 //! strategy.prewhiten = true;
 //! strategy.phase_correct = true;
 //! let volume = strategy.reconstruct(&file).unwrap();
-//! println!("Reconstructed {} slices", volume.magnitude.shape()[0]);
+//! println!("Reconstructed {} slices", volume.data.shape()[0]);
 //! ```
 
 pub mod coil;
