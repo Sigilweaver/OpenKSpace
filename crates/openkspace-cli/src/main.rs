@@ -669,14 +669,13 @@ fn cmd_recon(
 
     let volume = match strategy_arg {
         StrategyArg::IfftRss => {
-            let strategy = IfftRss {
-                remove_oversampling: !no_oversampling_removal,
-                prewhiten: !no_prewhiten,
-                phase_correct: !no_phasecorr,
-                partial_fourier: !no_partial_fourier,
-                fft_mode,
-                crop_to_recon_matrix: !no_crop,
-            };
+            let mut strategy = IfftRss::default();
+            strategy.remove_oversampling = !no_oversampling_removal;
+            strategy.prewhiten = !no_prewhiten;
+            strategy.phase_correct = !no_phasecorr;
+            strategy.partial_fourier = !no_partial_fourier;
+            strategy.fft_mode = fft_mode;
+            strategy.crop_to_recon_matrix = !no_crop;
             info!(
                 "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, partial_fourier={}, fft={:?})",
                 strategy.name(),
@@ -692,16 +691,15 @@ fn cmd_recon(
                 .context("reconstruction")?
         }
         StrategyArg::Grappa => {
-            let strategy = GrappaRss {
-                remove_oversampling: !no_oversampling_removal,
-                prewhiten: !no_prewhiten,
-                phase_correct: !no_phasecorr,
-                kernel_ky: grappa_kernel_ky,
-                kernel_kx: grappa_kernel_kx,
-                ridge: grappa_ridge,
-                fft_mode,
-                crop_to_recon_matrix: !no_crop,
-            };
+            let mut strategy = GrappaRss::default();
+            strategy.remove_oversampling = !no_oversampling_removal;
+            strategy.prewhiten = !no_prewhiten;
+            strategy.phase_correct = !no_phasecorr;
+            strategy.kernel_ky = grappa_kernel_ky;
+            strategy.kernel_kx = grappa_kernel_kx;
+            strategy.ridge = grappa_ridge;
+            strategy.fft_mode = fft_mode;
+            strategy.crop_to_recon_matrix = !no_crop;
             info!(
                 "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, \
                  kernel={}x{}, ridge={}, fft={:?})",
@@ -720,21 +718,20 @@ fn cmd_recon(
                 .context("reconstruction")?
         }
         StrategyArg::Sense => {
-            let strategy = SenseRss {
-                remove_oversampling: !no_oversampling_removal,
-                prewhiten: !no_prewhiten,
-                phase_correct: !no_phasecorr,
-                map_source: sense_map_source,
-                walsh_window: sense_walsh_window,
-                walsh_iters: sense_walsh_iters,
-                espirit_kernel,
-                espirit_threshold,
-                espirit_iters,
-                ridge: sense_ridge,
-                compute_gfactor: sense_gfactor || write_gfactor,
-                fft_mode,
-                crop_to_recon_matrix: !no_crop,
-            };
+            let mut strategy = SenseRss::default();
+            strategy.remove_oversampling = !no_oversampling_removal;
+            strategy.prewhiten = !no_prewhiten;
+            strategy.phase_correct = !no_phasecorr;
+            strategy.map_source = sense_map_source;
+            strategy.walsh_window = sense_walsh_window;
+            strategy.walsh_iters = sense_walsh_iters;
+            strategy.espirit_kernel = espirit_kernel;
+            strategy.espirit_threshold = espirit_threshold;
+            strategy.espirit_iters = espirit_iters;
+            strategy.ridge = sense_ridge;
+            strategy.compute_gfactor = sense_gfactor || write_gfactor;
+            strategy.fft_mode = fft_mode;
+            strategy.crop_to_recon_matrix = !no_crop;
             info!(
                 "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, \
                  map_source={:?}, ridge={}, fft={:?})",
@@ -752,15 +749,14 @@ fn cmd_recon(
                 .context("reconstruction")?
         }
         StrategyArg::Cs => {
-            let strategy = CsRss {
-                remove_oversampling: !no_oversampling_removal,
-                prewhiten: !no_prewhiten,
-                phase_correct: !no_phasecorr,
-                iters: cs_iters,
-                lambda: cs_lambda,
-                fft_mode,
-                crop_to_recon_matrix: !no_crop,
-            };
+            let mut strategy = CsRss::default();
+            strategy.remove_oversampling = !no_oversampling_removal;
+            strategy.prewhiten = !no_prewhiten;
+            strategy.phase_correct = !no_phasecorr;
+            strategy.iters = cs_iters;
+            strategy.lambda = cs_lambda;
+            strategy.fft_mode = fft_mode;
+            strategy.crop_to_recon_matrix = !no_crop;
             info!(
                 "Strategy: {} (oversampling_removal={}, prewhiten={}, phasecorr={}, \
                  iters={}, lambda={:.3e}, fft={:?})",

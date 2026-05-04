@@ -57,6 +57,7 @@ pub trait ReconStrategy {
 }
 
 /// Which FFT axes to transform.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FftMode {
     /// Pick 2D vs 3D from the acquisitions (2D if `kspace_encode_step_2==0`).
@@ -70,6 +71,7 @@ pub enum FftMode {
 /// Classical textbook reconstruction: centred IFFT + RSS coil combine,
 /// optionally preceded by readout oversampling removal, noise
 /// pre-whitening, and navigator phase correction.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct IfftRss {
     pub remove_oversampling: bool,
@@ -258,6 +260,7 @@ use tracing::warn;
 ///
 /// Falls back to [`IfftRss`] behavior when the data is fully sampled or
 /// the sampling pattern is unsupported.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct GrappaRss {
     pub remove_oversampling: bool,
@@ -448,6 +451,7 @@ use ndarray::{Array4, Axis};
 use num_complex::Complex32;
 
 /// Which sensitivity-map estimator the SENSE strategy uses.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SenseMapSource {
     /// Walsh adaptive combine from low-resolution ACS images.
@@ -456,7 +460,7 @@ pub enum SenseMapSource {
     Espirit,
 }
 
-/// Parallel-imaging reconstruction via SENSE with Walsh sensitivity maps.
+/// parallel-imaging reconstruction via SENSE with Walsh sensitivity maps.
 ///
 /// Detects a regular 1-D Cartesian undersampling pattern along ky (same
 /// pattern recognised by [`GrappaRss`]), estimates full-FOV coil
@@ -470,6 +474,7 @@ pub enum SenseMapSource {
 ///
 /// Falls back to plain IFFT+RSS when the pattern is fully sampled or
 /// unsupported (no ACS, non-integer acceleration, 3-D encoding).
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct SenseRss {
     pub remove_oversampling: bool,
@@ -728,6 +733,7 @@ use crate::cs::fista_cs_single_coil;
 /// FISTA (Beck & Teboulle 2009); citations are in `CREDITS.md`.
 ///
 /// Falls back to plain IFFT+RSS for 3-D encodings.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct CsRss {
     pub remove_oversampling: bool,

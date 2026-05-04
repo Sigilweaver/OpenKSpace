@@ -24,6 +24,7 @@ use tracing::{debug, info, warn};
 use crate::prewhiten::{cholesky_lower, invert_lower_triangular};
 
 /// 1-D cartesian sampling pattern detected from a `[kz, ky, kx]` mask.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct SamplingPattern {
     /// Integer acceleration factor along ky.
@@ -522,6 +523,7 @@ pub fn extract_acs_slice(
 }
 
 /// Errors raised by GRAPPA calibration / synthesis.
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum GrappaError {
     #[error("bad GRAPPA config: {0}")]

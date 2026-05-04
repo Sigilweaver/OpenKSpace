@@ -41,6 +41,7 @@ pub struct EncodingInfo {
     pub slice_limit: EncodingLimit,
 }
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Default)]
 pub struct IsmrmrdHeader {
     pub system_vendor: String,

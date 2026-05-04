@@ -76,6 +76,7 @@ fn read_f32_flat(file: &File, path: &str) -> IoResult<(Vec<f32>, Vec<usize>)> {
 // ── Public types ──────────────────────────────────────────────────────────────
 
 /// Metadata parsed from a FastMRI file.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct FastmriMeta {
     /// ISMRMRD-compatible XML header.
