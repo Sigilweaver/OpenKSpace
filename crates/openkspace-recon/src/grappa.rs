@@ -493,6 +493,7 @@ fn conjugate_transpose(a: &Array2<Complex32>) -> Array2<Complex32> {
 
 /// Detect a sampling pattern from a `[kz, ky, kx]` mask by projecting to
 /// `[ky]` (any-true across kz and kx) and analyzing.
+#[allow(clippy::needless_range_loop)]
 pub fn detect_pattern(mask: &Array3<bool>) -> Option<SamplingPattern> {
     let ny = mask.shape()[1];
     let mut ky_any = vec![false; ny];

@@ -33,6 +33,7 @@ use num_complex::Complex32;
 /// Input shape: `[nc, ny, nx]`. Output has the same shape. `window` is the
 /// half-size of the accumulation neighbourhood (e.g. `window = 3` uses a
 /// 7x7 window). `power_iters` is the number of power-iteration steps.
+#[allow(clippy::needless_range_loop)]
 pub fn walsh_sensitivity_maps(
     coil_imgs: &Array3<Complex32>,
     window: usize,

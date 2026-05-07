@@ -48,6 +48,7 @@ use crate::shift::{fftshift_axis, ifftshift_axis};
 ///   calibration SVD and the per-voxel eigenproblem.
 ///
 /// Output: `[Nc, Ny, Nx]` complex sensitivity map.
+#[allow(clippy::needless_range_loop)]
 pub fn espirit_sensitivity_maps(
     acs: &Array3<Complex32>,
     image_shape: (usize, usize),
@@ -286,6 +287,7 @@ pub fn espirit_sensitivity_maps(
 ///
 /// This routine is deliberately simple and is only used on the small
 /// `N × N` calibration matrix `A^H A` (with `N = Nc · kw · kw`).
+#[allow(clippy::needless_range_loop)]
 fn top_hermitian_eigpairs(
     a: &Array2<Complex32>,
     num: usize,

@@ -11,8 +11,8 @@
 //! which uses:
 //!   1. a low-pass phase estimate from the symmetric central region, and
 //!   2. a ramp / step weighting that doubles the asymmetric acquired tail,
-//! to recover a sharp magnitude image without explicitly filling the missing
-//! k-space region.
+//!      to recover a sharp magnitude image without explicitly filling the
+//!      missing k-space region.
 //!
 //! References consulted for the algorithm (no code copied):
 //!   - Noll, Nishimura, Macovski, IEEE TMI 10(2), 1991.
@@ -51,6 +51,7 @@ impl PartialFourierPlan {
     /// (the other side is at least `min_asymmetry_ratio` times as long).
     /// GRAPPA-style regular undersampling patterns (periodic gaps) are
     /// rejected; use the GRAPPA strategy for those.
+    #[allow(clippy::needless_range_loop)]
     pub fn detect(mask: &Array3<bool>, ky_dc: usize) -> Option<Self> {
         let ny = mask.shape()[1];
         if ny < 8 {
@@ -148,6 +149,7 @@ fn low_pass_weights(plan: &PartialFourierPlan) -> Vec<f32> {
 
 /// Build the homodyne weight `H[ky]`: 2 on the acquired asymmetric tail,
 /// 1 on the symmetric band, 0 on the missing tail, with Hann-ramp edges.
+#[allow(clippy::needless_range_loop)]
 fn homodyne_weights(plan: &PartialFourierPlan) -> Vec<f32> {
     let mut w = vec![0.0f32; plan.ny];
     let c = plan.ky_dc as isize;

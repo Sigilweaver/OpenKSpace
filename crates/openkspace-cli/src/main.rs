@@ -15,7 +15,7 @@ use openkspace_recon::{
     ReconStrategy, SenseMapSource, SenseRss,
 };
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tracing::{info, warn};
 
@@ -331,7 +331,7 @@ enum FileFormat {
 /// ISMRMRD has `/dataset/data` (compound acquisition records).
 /// FastMRI has `/kspace` (pre-assembled complex tensor).
 /// We probe by attempting to open each in turn.
-fn detect_format(path: &PathBuf) -> Result<FileFormat> {
+fn detect_format(path: &Path) -> Result<FileFormat> {
     if is_fastmri(path) {
         Ok(FileFormat::FastMri)
     } else if IsmrmrdFile::open(path).is_ok() {
@@ -591,9 +591,10 @@ fn cmd_probe(path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_recon(
-    path: &PathBuf,
-    out_dir: &PathBuf,
+    path: &Path,
+    out_dir: &Path,
     slice_sel: Option<usize>,
     pct_low: f32,
     pct_high: f32,
@@ -895,9 +896,10 @@ fn cmd_recon(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_recon_fastmri(
-    path: &PathBuf,
-    out_dir: &PathBuf,
+    path: &Path,
+    out_dir: &Path,
     slice_sel: Option<usize>,
     pct_low: f32,
     pct_high: f32,

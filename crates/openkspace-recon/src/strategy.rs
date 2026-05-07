@@ -867,6 +867,7 @@ impl ReconStrategy for CsRss {
                     .map_err(|e| IoError::Inconsistent(e.to_string()))?;
                 coil_imgs.push(recon);
             }
+            #[allow(clippy::needless_range_loop)]
             for y in 0..ny {
                 for x in 0..nx {
                     let mut s = 0.0f32;

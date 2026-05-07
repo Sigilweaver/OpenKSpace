@@ -114,6 +114,7 @@ impl NoisePrewhitener {
     ///
     /// The acquisition's `data` is interpreted as `[nc, ns]`; each column
     /// vector `s` is replaced by `W * s`.
+    #[allow(clippy::needless_range_loop)]
     pub fn apply(&self, acq: &mut Acquisition) {
         if acq.num_channels() != self.nc {
             // Silently skip mismatched acquisitions (e.g. calibration scans
