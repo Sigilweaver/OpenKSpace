@@ -171,7 +171,7 @@ impl ReconStrategy for IfftRss {
             FftMode::ThreeD => true,
         };
         if !three_d && self.partial_fourier {
-            let ky_dc = (kspace.shape()[2] / 2) as usize;
+            let ky_dc = (kspace.shape()[2] / 2);
             if let Some(plan) = PartialFourierPlan::detect(&mask, ky_dc) {
                 let mut magnitude = homodyne_reconstruct(&kspace, &plan);
                 drop(kspace);

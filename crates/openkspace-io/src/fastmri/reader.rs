@@ -59,7 +59,7 @@ impl From<Cf32> for Complex32 {
 // ── Helpers to read flat Vecs from HDF5 ──────────────────────────────────────
 
 fn read_complex_flat(file: &File, path: &str) -> IoResult<(Vec<Complex32>, Vec<usize>)> {
-    let ds    = file.dataset(path)?;
+    let ds = file.dataset(path)?;
     let shape = ds.shape();
     let raw: Vec<Cf32> = ds.read_raw()?;
     let data: Vec<Complex32> = raw.into_iter().map(Into::into).collect();
@@ -67,7 +67,7 @@ fn read_complex_flat(file: &File, path: &str) -> IoResult<(Vec<Complex32>, Vec<u
 }
 
 fn read_f32_flat(file: &File, path: &str) -> IoResult<(Vec<f32>, Vec<usize>)> {
-    let ds    = file.dataset(path)?;
+    let ds = file.dataset(path)?;
     let shape = ds.shape();
     let data: Vec<f32> = ds.read_raw()?;
     Ok((data, shape))
@@ -112,7 +112,7 @@ impl FastmriFile {
         let file = File::open(path)?;
 
         // ── XML header ────────────────────────────────────────────────────
-        let xml_ds  = file.dataset("ismrmrd_header")?;
+        let xml_ds = file.dataset("ismrmrd_header")?;
         let xml_str = xml_ds
             .read_scalar::<hdf5_metno::types::VarLenUnicode>()
             .map(|s| s.as_str().to_string())
@@ -133,8 +133,7 @@ impl FastmriFile {
                 kshape.len()
             )));
         }
-        let (n_slices, n_coils, n_ky, n_kx) =
-            (kshape[0], kshape[1], kshape[2], kshape[3]);
+        let (n_slices, n_coils, n_ky, n_kx) = (kshape[0], kshape[1], kshape[2], kshape[3]);
 
         // ── RSS reconstruction shape ──────────────────────────────────────
         let rshape = file.dataset("reconstruction_rss")?.shape();
@@ -160,12 +159,18 @@ impl FastmriFile {
                 .unwrap_or_default()
         };
         let acquisition = attr_str("acquisition");
-        let patient_id  = attr_str("patient_id");
+        let patient_id = attr_str("patient_id");
 
         info!(
             "Opened {}  -- {} slices, {} coils, ky={}, kx={}, recon={}x{}, acq={:?}",
             path.display(),
-            n_slices, n_coils, n_ky, n_kx, recon_y, recon_x, acquisition,
+            n_slices,
+            n_coils,
+            n_ky,
+            n_kx,
+            recon_y,
+            recon_x,
+            acquisition,
         );
 
         Ok(FastmriFile {
@@ -204,9 +209,9 @@ impl FastmriFile {
             for c in 0..nc {
                 let src_off = s * slice_stride + c * coil_stride;
                 out.slice_mut(ndarray::s![c, s, .., ..])
-                   .iter_mut()
-                   .zip(&data[src_off..src_off + coil_stride])
-                   .for_each(|(dst, src)| *dst = *src);
+                    .iter_mut()
+                    .zip(&data[src_off..src_off + coil_stride])
+                    .for_each(|(dst, src)| *dst = *src);
             }
         }
         Ok(out)
@@ -226,17 +231,17 @@ impl FastmriFile {
             )));
         }
         let (data, _) = read_complex_flat(&self.file, "kspace")?;
-        let coil_stride  = m.n_ky * m.n_kx;
+        let coil_stride = m.n_ky * m.n_kx;
         let slice_stride = m.n_coils * coil_stride;
-        let slice_base   = slice_idx * slice_stride;
+        let slice_base = slice_idx * slice_stride;
 
         let mut out = Array3::<Complex32>::zeros((m.n_coils, m.n_ky, m.n_kx));
         for c in 0..m.n_coils {
             let src_off = slice_base + c * coil_stride;
             out.slice_mut(ndarray::s![c, .., ..])
-               .iter_mut()
-               .zip(&data[src_off..src_off + coil_stride])
-               .for_each(|(dst, src)| *dst = *src);
+                .iter_mut()
+                .zip(&data[src_off..src_off + coil_stride])
+                .for_each(|(dst, src)| *dst = *src);
         }
         Ok(out)
     }
@@ -260,7 +265,7 @@ impl FastmriFile {
         }
         let (data, _) = read_f32_flat(&self.file, "reconstruction_rss")?;
         let stride = m.recon_y * m.recon_x;
-        let off    = slice_idx * stride;
+        let off = slice_idx * stride;
         Array2::from_shape_vec((m.recon_y, m.recon_x), data[off..off + stride].to_vec())
             .map_err(|e| IoError::Inconsistent(e.to_string()))
     }

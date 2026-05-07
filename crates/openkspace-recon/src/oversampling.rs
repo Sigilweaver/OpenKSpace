@@ -51,7 +51,7 @@ impl OversamplingRemover {
         if recon_x == 0 || encoded_x <= recon_x {
             return None;
         }
-        if encoded_x % recon_x != 0 {
+        if !encoded_x.is_multiple_of(recon_x) {
             return None;
         }
         let ratio = encoded_x / recon_x;
@@ -124,7 +124,7 @@ impl OversamplingRemover {
             lane_buf.copy_from_slice(src);
 
             // ifftshift -> IFFT -> scale -> fftshift
-            rotate_left(&mut lane_buf, (self.encoded_ns + 1) / 2);
+            rotate_left(&mut lane_buf, self.encoded_ns.div_ceil(2));
             self.ifft_plan
                 .process_with_scratch(&mut lane_buf, &mut scratch[..ifft_scratch_len]);
             for v in lane_buf.iter_mut() {
@@ -136,7 +136,7 @@ impl OversamplingRemover {
             cropped.copy_from_slice(&lane_buf[crop_start..crop_start + self.recon_ns]);
 
             // ifftshift -> FFT -> fftshift back to centred k-space.
-            rotate_left(&mut cropped, (self.recon_ns + 1) / 2);
+            rotate_left(&mut cropped, self.recon_ns.div_ceil(2));
             self.fft_plan
                 .process_with_scratch(&mut cropped, &mut scratch[..fft_scratch_len]);
             rotate_left(&mut cropped, self.recon_ns / 2);

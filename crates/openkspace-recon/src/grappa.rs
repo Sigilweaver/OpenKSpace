@@ -108,7 +108,7 @@ impl SamplingPattern {
         let mut diffs: Vec<usize> = outside.windows(2).map(|w| w[1] - w[0]).collect();
         diffs.sort_unstable();
         let r = diffs[diffs.len() / 2];
-        if r < 2 || r > 8 {
+        if !(2..=8).contains(&r) {
             debug!("GRAPPA: unsupported acceleration R={}", r);
             return None;
         }
@@ -164,10 +164,10 @@ impl GrappaKernel {
         if r < 2 {
             return Err(GrappaError::BadConfig("acceleration must be >= 2"));
         }
-        if kernel_ky < 2 || kernel_ky % 2 != 0 {
+        if kernel_ky < 2 || !kernel_ky.is_multiple_of(2) {
             return Err(GrappaError::BadConfig("kernel_ky must be even >= 2"));
         }
-        if kernel_kx == 0 || kernel_kx % 2 == 0 {
+        if kernel_kx == 0 || kernel_kx.is_multiple_of(2) {
             return Err(GrappaError::BadConfig("kernel_kx must be odd >= 1"));
         }
 

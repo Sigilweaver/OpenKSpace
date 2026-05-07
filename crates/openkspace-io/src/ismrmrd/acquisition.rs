@@ -67,7 +67,7 @@ pub struct AcquisitionHeader {
 // bitmask `1 << (pos - 1)`.
 // ---------------------------------------------------------------------------
 pub mod flags {
-    pub const ACQ_FIRST_IN_ENCODE_STEP1: u64 = 1 << (1 - 1);
+    pub const ACQ_FIRST_IN_ENCODE_STEP1: u64 = 1 << 0; // bit position 1
     pub const ACQ_LAST_IN_ENCODE_STEP1: u64 = 1 << (2 - 1);
     pub const ACQ_FIRST_IN_SLICE: u64 = 1 << (7 - 1);
     pub const ACQ_LAST_IN_SLICE: u64 = 1 << (8 - 1);

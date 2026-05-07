@@ -166,7 +166,7 @@ fn centred_fft2(
     let s = 1.0 / ((ny as f32 * nx as f32).sqrt());
     for i in 0..ny {
         for j in 0..nx {
-            a[[i, j]] = a[[i, j]] * Complex32::new(s, 0.0);
+            a[[i, j]] *= Complex32::new(s, 0.0);
         }
     }
 }
@@ -206,7 +206,7 @@ fn centred_ifft2(
     let s = 1.0 / ((ny as f32 * nx as f32).sqrt());
     for i in 0..ny {
         for j in 0..nx {
-            a[[i, j]] = a[[i, j]] * Complex32::new(s, 0.0);
+            a[[i, j]] *= Complex32::new(s, 0.0);
         }
     }
 }

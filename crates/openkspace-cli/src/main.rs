@@ -462,15 +462,15 @@ fn cmd_info_fastmri(path: &PathBuf, json: bool) -> Result<()> {
 fn cmd_probe(path: &PathBuf) -> Result<()> {
     match detect_format(path)? {
         FileFormat::FastMri => {
-            let f = FastmriFile::open(path)
-                .with_context(|| format!("opening {}", path.display()))?;
+            let f =
+                FastmriFile::open(path).with_context(|| format!("opening {}", path.display()))?;
             println!(
                 "FastMRI file: pre-assembled [{slices}, {coils}, {ky}, {kx}] tensor -- \
                  no per-acquisition index to probe.",
                 slices = f.meta.n_slices,
-                coils  = f.meta.n_coils,
-                ky     = f.meta.n_ky,
-                kx     = f.meta.n_kx,
+                coils = f.meta.n_coils,
+                ky = f.meta.n_ky,
+                kx = f.meta.n_kx,
             );
             return Ok(());
         }
@@ -638,8 +638,15 @@ fn cmd_recon(
                 );
             }
             return cmd_recon_fastmri(
-                path, out_dir, slice_sel, pct_low, pct_high, no_crop,
-                strategy_arg, format, verbose,
+                path,
+                out_dir,
+                slice_sel,
+                pct_low,
+                pct_high,
+                no_crop,
+                strategy_arg,
+                format,
+                verbose,
             );
         }
         FileFormat::Ismrmrd => {}
@@ -817,8 +824,7 @@ fn cmd_recon(
     }
 
     // ── PNG output ────────────────────────────────────────────────────────
-    let write_pngs =
-        matches!(format, OutputFormat::Png | OutputFormat::Both) || write_gfactor;
+    let write_pngs = matches!(format, OutputFormat::Png | OutputFormat::Both) || write_gfactor;
     if write_pngs {
         let write_pb = if verbose == 0 && slices.len() > 1 {
             let b = ProgressBar::new(slices.len() as u64);
@@ -855,12 +861,10 @@ fn cmd_recon(
                 match gfactor.as_ref() {
                     Some(gv) => {
                         let gslice: Array2<f32> = gv.index_axis(Axis(0), iz).to_owned();
-                        let gpath =
-                            file_out_dir.join(format!("gfactor_slice_{iz:04}.png"));
+                        let gpath = file_out_dir.join(format!("gfactor_slice_{iz:04}.png"));
                         let mut sorted: Vec<f32> = gslice.iter().copied().collect();
-                        sorted.sort_by(|a, b| {
-                            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-                        });
+                        sorted
+                            .sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                         let hi = percentile(&sorted, 99.0).max(2.0);
                         write_png_linear(&gslice, &gpath, 1.0, hi)
                             .with_context(|| format!("writing {}", gpath.display()))?;
@@ -1057,8 +1061,8 @@ fn write_nifti_volume(vol: &ndarray::Array3<f32>, path: &std::path::Path) -> Res
     hdr[344..348].copy_from_slice(b"n+1\0");
 
     use std::io::Write;
-    let mut file = std::fs::File::create(path)
-        .with_context(|| format!("creating {}", path.display()))?;
+    let mut file =
+        std::fs::File::create(path).with_context(|| format!("creating {}", path.display()))?;
     file.write_all(&hdr)?;
     file.write_all(&[0u8; 4])?; // no extensions
     for &v in vol.iter() {
@@ -1074,8 +1078,12 @@ fn slice_stats(slice: &Array2<f32>) -> (f32, f32, f32) {
     let mut sum = 0.0f64;
     let n = slice.len();
     for &v in slice.iter() {
-        if v < min { min = v; }
-        if v > max { max = v; }
+        if v < min {
+            min = v;
+        }
+        if v > max {
+            max = v;
+        }
         sum += v as f64;
     }
     (min, max, (sum / n as f64) as f32)
@@ -1175,7 +1183,11 @@ mod tests {
         assert_eq!(datatype, 16, "datatype");
         // vox_offset = 352.0 at byte 108
         let vox_offset = f32::from_le_bytes(bytes[108..112].try_into().unwrap());
-        assert!((vox_offset - 352.0).abs() < 1e-6, "vox_offset={}", vox_offset);
+        assert!(
+            (vox_offset - 352.0).abs() < 1e-6,
+            "vox_offset={}",
+            vox_offset
+        );
         // magic = "n+1\0" at byte 344
         assert_eq!(&bytes[344..348], b"n+1\0", "magic");
         // Total file size: 348 header + 4 extension + nz*ny*nx * 4 bytes

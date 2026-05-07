@@ -80,7 +80,7 @@ pub fn walsh_sensitivity_maps(
             } else {
                 let inv = 1.0 / init_norm.sqrt();
                 for c in 0..nc {
-                    v[c] = v[c] * inv;
+                    v[c] *= inv;
                 }
             }
 
@@ -125,7 +125,7 @@ pub fn walsh_sensitivity_maps(
                 let ref_val = v[imax];
                 let phase = Complex32::new(ref_val.re / mmax, -ref_val.im / mmax);
                 for c in 0..nc {
-                    v[c] = v[c] * phase;
+                    v[c] *= phase;
                 }
             }
 

@@ -22,7 +22,7 @@ pub fn ifftshift_axis<D: Dimension>(a: &mut Array<Complex32, D>, axis: usize) {
     if n < 2 {
         return;
     }
-    rotate_axis(a.view_mut(), axis, (n + 1) / 2);
+    rotate_axis(a.view_mut(), axis, n.div_ceil(2));
 }
 
 /// Shift axis `axis` left by `k` positions (equivalent to `np.roll(-k)`).

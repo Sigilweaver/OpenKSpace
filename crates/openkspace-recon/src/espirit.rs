@@ -223,7 +223,7 @@ pub fn espirit_sensitivity_maps(
             }
             let inv0 = 1.0 / nrm0.sqrt();
             for c in 0..nc {
-                v[c] = v[c] * Complex32::new(inv0, 0.0);
+                v[c] *= Complex32::new(inv0, 0.0);
             }
 
             let mut lambda = 0.0f32;
@@ -266,7 +266,7 @@ pub fn espirit_sensitivity_maps(
                 let r = v[imax];
                 let phase = Complex32::new(r.re / mmax, -r.im / mmax);
                 for c in 0..nc {
-                    v[c] = v[c] * phase;
+                    v[c] *= phase;
                 }
             }
 
@@ -310,7 +310,7 @@ fn top_hermitian_eigpairs(
             break;
         }
         for x in &mut v {
-            *x = *x * Complex32::new(1.0 / nrm0, 0.0);
+            *x *= Complex32::new(1.0 / nrm0, 0.0);
         }
 
         let mut lambda = 0.0f32;
