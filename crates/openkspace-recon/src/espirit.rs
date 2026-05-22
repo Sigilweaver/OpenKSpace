@@ -533,7 +533,11 @@ mod tests {
                     let xx = x as f32 - xc;
                     let s = (-(yy * yy + xx * xx) / 200.0).exp();
                     // phantom = 1 in center square
-                    let ph = if y >= 8 && y < 24 && x >= 8 && x < 24 { 1.0f32 } else { 0.0 };
+                    let ph = if (8..24).contains(&y) && (8..24).contains(&x) {
+                        1.0f32
+                    } else {
+                        0.0
+                    };
                     coil[[c, y, x]] = Complex32::new(s * ph, 0.0);
                 }
             }
@@ -551,23 +555,37 @@ mod tests {
             ifftshift_axis(&mut plane, 0);
             ifftshift_axis(&mut plane, 1);
             for y in 0..ny {
-                for x in 0..nx { bx[x] = plane[[y, x]]; }
+                for x in 0..nx {
+                    bx[x] = plane[[y, x]];
+                }
                 fft_x.process(&mut bx);
-                for x in 0..nx { plane[[y, x]] = bx[x]; }
+                for x in 0..nx {
+                    plane[[y, x]] = bx[x];
+                }
             }
             for x in 0..nx {
-                for y in 0..ny { by[y] = plane[[y, x]]; }
+                for y in 0..ny {
+                    by[y] = plane[[y, x]];
+                }
                 fft_y.process(&mut by);
-                for y in 0..ny { plane[[y, x]] = by[y]; }
+                for y in 0..ny {
+                    plane[[y, x]] = by[y];
+                }
             }
             fftshift_axis(&mut plane, 0);
             fftshift_axis(&mut plane, 1);
-            for y in 0..ny { for x in 0..nx { k[[c, y, x]] = plane[[y, x]]; } }
+            for y in 0..ny {
+                for x in 0..nx {
+                    k[[c, y, x]] = plane[[y, x]];
+                }
+            }
         }
         let acs_w = 16usize;
         let y0 = (ny - acs_w) / 2;
         let x0 = (nx - acs_w) / 2;
-        let acs = k.slice(ndarray::s![.., y0..y0 + acs_w, x0..x0 + acs_w]).to_owned();
+        let acs = k
+            .slice(ndarray::s![.., y0..y0 + acs_w, x0..x0 + acs_w])
+            .to_owned();
         let maps = espirit_sensitivity_maps(&acs, (ny, nx), 5, 0.02, 40);
 
         // Verify shape is compatible with SENSE.
@@ -579,9 +597,13 @@ mod tests {
             for yr in 0..ny_red {
                 for x in 0..nx {
                     let mut val = Complex32::new(0.0, 0.0);
-                    for ki in 0..r { val += coil[[c, yr + ki * ny_red, x]]; }
-                    val = val * Complex32::new(1.0 / r as f32, 0.0);
-                    for ki in 0..r { aliased[[c, yr + ki * ny_red, x]] = val; }
+                    for ki in 0..r {
+                        val += coil[[c, yr + ki * ny_red, x]];
+                    }
+                    val *= Complex32::new(1.0 / r as f32, 0.0);
+                    for ki in 0..r {
+                        aliased[[c, yr + ki * ny_red, x]] = val;
+                    }
                 }
             }
         }
@@ -593,12 +615,20 @@ mod tests {
         // Output must be finite and have the right shape.
         assert_eq!(out.dim(), (ny, nx));
         for ((y, x), &v) in out.indexed_iter() {
-            assert!(v.re.is_finite() && v.im.is_finite(),
-                "non-finite at ({},{}): {:?}", y, x, v);
+            assert!(
+                v.re.is_finite() && v.im.is_finite(),
+                "non-finite at ({},{}): {:?}",
+                y,
+                x,
+                v
+            );
         }
 
         // Basic sanity: total energy in output must be > 0 (maps are non-zero).
         let energy: f32 = out.iter().map(|v| v.norm_sqr()).sum();
-        assert!(energy > 0.0, "SENSE output has zero energy with ESPIRiT maps");
+        assert!(
+            energy > 0.0,
+            "SENSE output has zero energy with ESPIRiT maps"
+        );
     }
 }

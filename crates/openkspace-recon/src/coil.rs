@@ -15,8 +15,7 @@ use num_complex::Complex32;
 /// Output shape: `[...]`            (real f32)
 pub fn rss_combine<D: Dimension + ndarray::RemoveAxis>(
     coil_images: &Array<Complex32, D>,
-) -> Array<f32, D::Smaller>
-{
+) -> Array<f32, D::Smaller> {
     let sum_sq = coil_images.map(|c| c.norm_sqr()).sum_axis(Axis(0));
     sum_sq.mapv_into(f32::sqrt)
 }

@@ -42,7 +42,10 @@ use crate::wavelet::{haar_forward, haar_inverse, soft_threshold_details};
 #[derive(Debug, thiserror::Error)]
 pub enum CsError {
     #[error("CS: mask shape {mask:?} does not match kspace shape {kspace:?}")]
-    ShapeMismatch { kspace: (usize, usize), mask: (usize, usize) },
+    ShapeMismatch {
+        kspace: (usize, usize),
+        mask: (usize, usize),
+    },
     #[error("CS: Ny ({ny}) and Nx ({nx}) must both be even for Haar wavelet")]
     OddDimension { ny: usize, nx: usize },
 }
@@ -61,7 +64,10 @@ pub fn fista_cs_single_coil(
 ) -> Result<Array2<Complex32>, CsError> {
     let (ny, nx) = kspace_zf.dim();
     if mask.dim() != (ny, nx) {
-        return Err(CsError::ShapeMismatch { kspace: (ny, nx), mask: mask.dim() });
+        return Err(CsError::ShapeMismatch {
+            kspace: (ny, nx),
+            mask: mask.dim(),
+        });
     }
     if ny % 2 != 0 || nx % 2 != 0 {
         return Err(CsError::OddDimension { ny, nx });

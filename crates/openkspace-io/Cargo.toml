@@ -2,7 +2,13 @@
 name = "openkspace-io"
 version = { workspace = true }
 edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
 license = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+readme = { workspace = true }
 description = "Readers for MRI raw k-space formats: ISMRMRD (HDF5) and FastMRI (HDF5)."
 keywords = ["mri", "ismrmrd", "fastmri", "hdf5", "medical-imaging"]
 categories = ["parser-implementations", "science"]

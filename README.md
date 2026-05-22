@@ -1,7 +1,9 @@
 # OpenKSpace
 
+[![CI](https://github.com/Sigilweaver/OpenKSpace/actions/workflows/ci.yml/badge.svg)](https://github.com/Sigilweaver/OpenKSpace/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Rust MSRV](https://img.shields.io/badge/rust-1.75+-orange.svg)](https://www.rust-lang.org)
+[![Rust MSRV](https://img.shields.io/badge/rust-1.87+-orange.svg)](https://www.rust-lang.org)
+[![Docs](https://img.shields.io/badge/docs-sigilweaver.app-blue)](https://sigilweaver.app/openkspace/docs/)
 
 A Rust library and CLI for Cartesian MRI k-space reconstruction from
 [ISMRMRD](https://ismrmrd.github.io/) `.h5` files.

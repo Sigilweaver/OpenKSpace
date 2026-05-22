@@ -7,11 +7,24 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+authors = ["Nathan Riley <git@nathanriley.com>"]
 license = "Apache-2.0"
 repository = "https://github.com/Sigilweaver/OpenKSpace"
-rust-version = "1.75"
+homepage = "https://sigilweaver.app/openkspace/"
+documentation = "https://sigilweaver.app/openkspace/docs/"
+readme = "README.md"
+rust-version = "1.87"
+keywords = ["mri", "ismrmrd", "k-space", "reconstruction", "imaging"]
+categories = ["science", "command-line-utilities"]
+
+# Note: a workspace-wide `unsafe_code = "deny"` lint was considered to
+# match the rest of the Sigilweaver suite, but `openkspace-recon` has
+# isolated `unsafe { std::mem::zeroed() }` usage for zero-initializing
+# C-compatible POD structs and `ndarray::s!` internally uses `unsafe`
+# blocks under its own `#[allow]`. Tightening this requires a small
+# refactor planned for 0.3.0.
 
 [workspace.dependencies]
 # Core numerics
@@ -40,8 +53,8 @@ indicatif = "0.17"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 # Workspace-internal crates
-openkspace-io = { path = "crates/openkspace-io" }
-openkspace-recon = { path = "crates/openkspace-recon" }
+openkspace-io = { path = "crates/openkspace-io", version = "0.2.0" }
+openkspace-recon = { path = "crates/openkspace-recon", version = "0.2.0" }
 
 [profile.release]
 opt-level = 3

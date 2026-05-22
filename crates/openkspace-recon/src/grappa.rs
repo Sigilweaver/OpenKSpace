@@ -323,7 +323,9 @@ impl GrappaKernel {
             kspace.shape()[3],
         );
         if nc != self.nc {
-            return Err(GrappaError::BadConfig("coil count mismatch between kernel and kspace"));
+            return Err(GrappaError::BadConfig(
+                "coil count mismatch between kernel and kspace",
+            ));
         }
         let r = self.r;
         let kx_half = self.kernel_kx / 2;
@@ -572,6 +574,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::needless_range_loop)]
     fn pattern_detect_r2_with_acs() {
         // ny=64, R=2, ACS = 16 central lines (24..40), outside every 2nd.
         // Detection returns the longest run of consecutive sampled rows,
@@ -591,6 +594,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::needless_range_loop)]
     fn pattern_detect_r3() {
         let ny = 96;
         let mut mask = vec![false; ny];
@@ -745,7 +749,7 @@ mod tests {
             }
         }
         let _ = kernel.synthesize(&mut us); // may fail; must not panic
-        // Sampled rows must be unchanged.
+                                            // Sampled rows must be unchanged.
         for (i, y) in (0usize..).zip((0..ny).step_by(2)) {
             for x in 0..nx {
                 let want = before[i * nx + x];

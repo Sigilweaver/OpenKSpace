@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+- _No unreleased changes yet._
+
+## [0.2.0] - 2026-05-22
+
+Publication-ready glow up. Brings OpenKSpace into line with the rest
+of the Sigilweaver suite conventions.
+
+### Changed
+
+- Workspace MSRV raised from `1.75` to `1.87` to match the rest of
+  the suite.
+- Crate metadata moved fully under `[workspace.package]`:
+  `authors`, `repository`, `homepage`, `documentation`, `readme`,
+  `keywords`, `categories` are now declared once and inherited.
+- Forbid `unsafe_code` workspace-wide via `[workspace.lints.rust]`.
+
+### Added
+
+- README badges: CI, docs.
+- `CONTRIBUTING.md`.
+- GitHub Actions CI workflow (`cargo fmt` / `clippy` / `test` on Linux
+  and macOS, with HDF5 system deps).
+- GitHub Actions release workflow with crates.io trusted publishing
+  for `openkspace-io`, `openkspace-recon`, `openkspace-cli`.
+- `homepage = "https://sigilweaver.app/openkspace/"` and
+  `documentation = "https://sigilweaver.app/openkspace/docs/"` for
+  crates.io / docs.rs discovery.
+
 ## [0.1.0] - 2025-05-04
 
 Initial public release.

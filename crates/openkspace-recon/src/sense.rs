@@ -39,7 +39,10 @@ pub enum SenseError {
     #[error("SENSE: acceleration factor must be >= 1")]
     BadAcceleration,
     #[error("SENSE: aliased and map shapes do not match ({aliased:?} vs {maps:?})")]
-    ShapeMismatch { aliased: (usize, usize, usize), maps: (usize, usize, usize) },
+    ShapeMismatch {
+        aliased: (usize, usize, usize),
+        maps: (usize, usize, usize),
+    },
     #[error("SENSE: Ny ({ny}) must be divisible by R ({r})")]
     IndivisibleNy { ny: usize, r: usize },
 }
@@ -69,7 +72,10 @@ pub fn sense_unfold_1d(
         return Err(SenseError::BadAcceleration);
     }
     if maps.dim() != (nc, ny, nx) {
-        return Err(SenseError::ShapeMismatch { aliased: aliased.dim(), maps: maps.dim() });
+        return Err(SenseError::ShapeMismatch {
+            aliased: aliased.dim(),
+            maps: maps.dim(),
+        });
     }
     if ny % r != 0 {
         return Err(SenseError::IndivisibleNy { ny, r });
@@ -172,7 +178,11 @@ pub fn sense_unfold_1d(
 /// unfold. To keep numerics tractable we use the same Tikhonov
 /// ridge as the unfold solver; the result is therefore a practical
 /// (mildly regularised) g-factor rather than the noise-exact value.
-pub fn sense_gfactor_1d(maps: &Array3<Complex32>, r: usize, ridge: f32) -> Result<Array2<f32>, SenseError> {
+pub fn sense_gfactor_1d(
+    maps: &Array3<Complex32>,
+    r: usize,
+    ridge: f32,
+) -> Result<Array2<f32>, SenseError> {
     let (nc, ny, nx) = maps.dim();
     if r < 1 {
         return Err(SenseError::BadAcceleration);
@@ -380,7 +390,7 @@ mod tests {
                 for c in 0..nc {
                     mean += aliased[[c, y, x]];
                 }
-                mean = mean * Complex32::new(1.0 / nc as f32, 0.0);
+                mean *= Complex32::new(1.0 / nc as f32, 0.0);
                 let err = (out[[y, x]] - mean).norm();
                 assert!(err < 1e-4, "R=1 passthrough err={}", err);
             }
