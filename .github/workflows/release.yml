@@ -15,7 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: crates-io
     permissions:
-      id-token: write   # trusted publishing
       contents: read
     steps:
       - uses: actions/checkout@v4
@@ -29,14 +28,10 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Authenticate to crates.io (trusted publishing)
-        uses: rust-lang/crates-io-auth-action@v1
-        id: auth
-
       - name: Publish openkspace-io
         run: cargo publish -p openkspace-io --token "$CARGO_REGISTRY_TOKEN"
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Wait for crates.io index
         run: sleep 30
@@ -44,7 +39,7 @@ jobs:
       - name: Publish openkspace-recon
         run: cargo publish -p openkspace-recon --token "$CARGO_REGISTRY_TOKEN"
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Wait for crates.io index
         run: sleep 30
@@ -52,4 +47,4 @@ jobs:
       - name: Publish openkspace-cli
         run: cargo publish -p openkspace-cli --token "$CARGO_REGISTRY_TOKEN"
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
