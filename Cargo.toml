@@ -33,7 +33,7 @@ num-complex = "0.4"
 rustfft = "6.2"
 
 # HDF5 / ISMRMRD
-hdf5-metno = { version = "0.9", features = ["blosc"] }
+hdf5-metno = { version = "0.12", features = ["blosc"] }
 
 # XML header
 quick-xml = { version = "0.36", features = ["serialize"] }
