@@ -8,6 +8,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - _No unreleased changes yet._
 
+## [0.3.0] - 2026-05-31
+
+### Added
+
+- `CITATION.cff`: author identity (Nathan Riley + ORCID) and a
+  scaffolded `identifiers:` block ready for the Zenodo concept DOI.
+
+### Changed
+
+- **Panic surface eliminated (WP17).** Production code in
+  `openkspace-cli` no longer calls `unwrap()`; the static
+  `ProgressStyle::template()` is now `expect("static progress
+  template")`, and the BTreeSet next-value lookup uses
+  `copied().unwrap_or(0)`. Library crates carry
+  `#![cfg_attr(not(test), warn(clippy::unwrap_used,
+  clippy::expect_used))]` so future regressions are linted.
+- HDF5 dependency bumped from `hdf5-metno 0.9` to `0.12`
+  (`hdf5-metno-sys 0.11.3` supports HDF5 2.x).
+- CI: `HDF5_DIR` exported on macOS so `hdf5-metno-sys` can find
+  the brew install.
+
 ## [0.2.0] - 2026-05-22
 
 Publication-ready glow up. Brings OpenKSpace into line with the rest
