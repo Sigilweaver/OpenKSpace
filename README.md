@@ -1,6 +1,7 @@
 # OpenKSpace
 
 [![CI](https://github.com/Sigilweaver/OpenKSpace/actions/workflows/ci.yml/badge.svg)](https://github.com/Sigilweaver/OpenKSpace/actions/workflows/ci.yml)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20470593.svg)](https://doi.org/10.5281/zenodo.20470593)
 [![crates.io](https://img.shields.io/crates/v/openkspace-cli.svg)](https://crates.io/crates/openkspace-cli)
 [![docs.rs](https://img.shields.io/docsrs/openkspace-io)](https://docs.rs/openkspace-io)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
