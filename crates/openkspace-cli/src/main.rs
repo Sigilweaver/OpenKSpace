@@ -540,8 +540,8 @@ fn cmd_probe(path: &PathBuf) -> Result<()> {
             format!(
                 "{} unique: [{}..{}]",
                 s.len(),
-                s.iter().next().unwrap(),
-                s.iter().next_back().unwrap()
+                s.iter().next().copied().unwrap_or(0),
+                s.iter().next_back().copied().unwrap_or(0)
             )
         }
     };
@@ -666,7 +666,7 @@ fn cmd_recon(
         b.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.cyan} {msg}")
-                .unwrap(),
+                .expect("static progress template"),
         );
         b.enable_steady_tick(Duration::from_millis(100));
         b.set_message("Reconstructing...");
@@ -832,7 +832,7 @@ fn cmd_recon(
             b.set_style(
                 ProgressStyle::default_bar()
                     .template("[{bar:40.cyan/blue}] {pos}/{len} slices  {elapsed_precise}")
-                    .unwrap()
+                    .expect("static progress template")
                     .progress_chars("=>-"),
             );
             Some(b)
@@ -929,7 +929,7 @@ fn cmd_recon_fastmri(
         b.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.cyan} {msg}")
-                .unwrap(),
+                .expect("static progress template"),
         );
         b.enable_steady_tick(Duration::from_millis(100));
         b.set_message("Reading k-space and reconstructing...");
@@ -996,7 +996,7 @@ fn cmd_recon_fastmri(
             b.set_style(
                 ProgressStyle::default_bar()
                     .template("[{bar:40.cyan/blue}] {pos}/{len} slices  {elapsed_precise}")
-                    .unwrap()
+                    .expect("static progress template")
                     .progress_chars("=>-"),
             );
             Some(b)
