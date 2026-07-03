@@ -46,7 +46,7 @@ from PIL import Image
 from skimage.metrics import structural_similarity as ssim
 
 
-# ── Format detection ──────────────────────────────────────────────────────────
+# -- Format detection --
 
 def _is_fastmri(h5_path: str) -> bool:
     """Return True if the HDF5 file has a /kspace dataset (FastMRI layout)."""
@@ -57,7 +57,7 @@ def _is_fastmri(h5_path: str) -> bool:
         return False
 
 
-# ── FastMRI reference and openkspace runner ───────────────────────────────────
+# -- FastMRI reference and openkspace runner --
 
 def ref_recon_fastmri(h5_path: str, slice_idx: int) -> np.ndarray:
     """Load reconstruction_rss[slice_idx] as a float32 (y, x) array."""

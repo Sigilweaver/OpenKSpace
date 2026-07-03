@@ -319,7 +319,7 @@ fn cmd_info(path: &PathBuf, json: bool) -> Result<()> {
     }
 }
 
-// ── Format detection ──────────────────────────────────────────────────────────
+// -- Format detection --
 
 enum FileFormat {
     Ismrmrd,
@@ -344,7 +344,7 @@ fn detect_format(path: &Path) -> Result<FileFormat> {
     }
 }
 
-// ── info ──────────────────────────────────────────────────────────────────────
+// -- info --
 
 fn cmd_info_ismrmrd(path: &PathBuf, json: bool) -> Result<()> {
     let f = IsmrmrdFile::open(path).with_context(|| format!("opening {}", path.display()))?;
@@ -806,7 +806,7 @@ fn cmd_recon(
         None => (0..nz).collect(),
     };
 
-    // ── NIfTI output ─────────────────────────────────────────────────────
+    // -- NIfTI output --
     if matches!(format, OutputFormat::Nifti | OutputFormat::Both) {
         let nii_vol: ndarray::Array3<f32> = if slices.len() == nz {
             magnitude.view().to_owned()
@@ -824,7 +824,7 @@ fn cmd_recon(
         info!("Wrote {} (NIfTI)", nii_path.display());
     }
 
-    // ── PNG output ────────────────────────────────────────────────────────
+    // -- PNG output --
     let write_pngs = matches!(format, OutputFormat::Png | OutputFormat::Both) || write_gfactor;
     if write_pngs {
         let write_pb = if verbose == 0 && slices.len() > 1 {
@@ -971,7 +971,7 @@ fn cmd_recon_fastmri(
         None => (0..nz).collect(),
     };
 
-    // ── NIfTI output ─────────────────────────────────────────────────────
+    // -- NIfTI output --
     if matches!(format, OutputFormat::Nifti | OutputFormat::Both) {
         let nii_vol: ndarray::Array3<f32> = if slices.len() == nz {
             magnitude.view().to_owned()
@@ -989,7 +989,7 @@ fn cmd_recon_fastmri(
         info!("Wrote {} (NIfTI)", nii_path.display());
     }
 
-    // ── PNG output ────────────────────────────────────────────────────────
+    // -- PNG output --
     if matches!(format, OutputFormat::Png | OutputFormat::Both) {
         let write_pb = if verbose == 0 && slices.len() > 1 {
             let b = ProgressBar::new(slices.len() as u64);

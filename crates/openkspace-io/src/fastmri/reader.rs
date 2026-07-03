@@ -56,7 +56,7 @@ impl From<Cf32> for Complex32 {
     }
 }
 
-// ── Helpers to read flat Vecs from HDF5 ──────────────────────────────────────
+// -- Helpers to read flat Vecs from HDF5 --
 
 fn read_complex_flat(file: &File, path: &str) -> IoResult<(Vec<Complex32>, Vec<usize>)> {
     let ds = file.dataset(path)?;
@@ -73,7 +73,7 @@ fn read_f32_flat(file: &File, path: &str) -> IoResult<(Vec<f32>, Vec<usize>)> {
     Ok((data, shape))
 }
 
-// ── Public types ──────────────────────────────────────────────────────────────
+// -- Public types --
 
 /// Metadata parsed from a FastMRI file.
 #[non_exhaustive]
@@ -111,7 +111,7 @@ impl FastmriFile {
         let path = path.as_ref();
         let file = File::open(path)?;
 
-        // ── XML header ────────────────────────────────────────────────────
+        // -- XML header --
         let xml_ds = file.dataset("ismrmrd_header")?;
         let xml_str = xml_ds
             .read_scalar::<hdf5_metno::types::VarLenUnicode>()
@@ -125,7 +125,7 @@ impl FastmriFile {
 
         let header = IsmrmrdHeader::parse(&xml_str)?;
 
-        // ── k-space shape ─────────────────────────────────────────────────
+        // -- k-space shape --
         let kshape = file.dataset("kspace")?.shape();
         if kshape.len() != 4 {
             return Err(IoError::Unsupported(format!(
@@ -135,7 +135,7 @@ impl FastmriFile {
         }
         let (n_slices, n_coils, n_ky, n_kx) = (kshape[0], kshape[1], kshape[2], kshape[3]);
 
-        // ── RSS reconstruction shape ──────────────────────────────────────
+        // -- RSS reconstruction shape --
         let rshape = file.dataset("reconstruction_rss")?.shape();
         if rshape.len() != 3 {
             return Err(IoError::Unsupported(format!(
@@ -151,7 +151,7 @@ impl FastmriFile {
         }
         let (recon_y, recon_x) = (rshape[1], rshape[2]);
 
-        // ── File-level attributes ─────────────────────────────────────────
+        // -- File-level attributes --
         let attr_str = |key: &str| -> String {
             file.attr(key)
                 .and_then(|a| a.read_scalar::<hdf5_metno::types::VarLenUnicode>())
