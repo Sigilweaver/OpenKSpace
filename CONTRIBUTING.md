@@ -41,6 +41,19 @@ OpenKSpace ships with small public-domain ISMRMRD samples under
 add proprietary scanner data; if a reproduction requires a specific
 dataset, document where to obtain it rather than checking it in.
 
+## Security
+
+Please report security vulnerabilities privately via GitHub Security
+Advisories - see [SECURITY.md](SECURITY.md). Do not open public issues
+for vulnerabilities.
+
+## DCO
+
+By submitting a contribution you certify that you have the right
+to submit the work under the project license (Apache-2.0) and
+agree to the
+[Developer Certificate of Origin](https://developercertificate.org/).
+
 ## License
 
 By submitting a PR you agree that your contribution is licensed under
