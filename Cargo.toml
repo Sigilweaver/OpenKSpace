@@ -53,8 +53,8 @@ indicatif = "0.17"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 # Workspace-internal crates
-openkspace-io = { path = "crates/openkspace-io", version = "0.2.0" }
-openkspace-recon = { path = "crates/openkspace-recon", version = "0.2.0" }
+openkspace-io = { path = "crates/openkspace-io", version = "0.3.0" }
+openkspace-recon = { path = "crates/openkspace-recon", version = "0.3.0" }
 
 [profile.release]
 opt-level = 3
