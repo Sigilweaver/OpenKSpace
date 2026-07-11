@@ -76,7 +76,7 @@ const config: Config = {
                     position: 'left',
                     items: [
                         { label: 'OpenKSpace', href: 'https://sigilweaver.app/openkspace/docs/' },
-                        { label: 'BioLance', href: 'https://sigilweaver.app/biolance/docs/' },
+                        { label: 'GenoLance', href: 'https://github.com/Sigilweaver/GenoLance' },
                         { label: 'DICOM-Atlas', href: 'https://sigilweaver.app/dicom-atlas/docs/' },
                         { label: 'OpenMassSpec', href: 'https://sigilweaver.app/openmassspec/docs/' },
                         { label: 'All projects', href: 'https://sigilweaver.app/docs/' },
@@ -103,7 +103,7 @@ const config: Config = {
                 {
                     title: 'Related',
                     items: [
-                        { label: 'BioLance', href: 'https://sigilweaver.app/biolance/docs/' },
+                        { label: 'GenoLance', href: 'https://github.com/Sigilweaver/GenoLance' },
                         { label: 'DICOM-Atlas', href: 'https://sigilweaver.app/dicom-atlas/docs/' },
                         { label: 'All projects', href: 'https://sigilweaver.app/docs/' },
                     ],
