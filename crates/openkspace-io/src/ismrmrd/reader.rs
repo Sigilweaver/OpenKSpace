@@ -105,11 +105,16 @@ impl IsmrmrdFile {
             for row in arr.into_iter() {
                 // hdf5-metno's VarLenArray<T> derefs to &[T].
                 let samples: &[f32] = &row.data;
-                let expected =
-                    row.head.number_of_samples as usize * row.head.active_channels as usize * 2;
-                if samples.len() != expected {
+                // number_of_samples / active_channels come straight from the
+                // file; guard the multiply so a crafted header can't wrap
+                // around to a small `expected` and slip past the length
+                // check below.
+                let expected = (row.head.number_of_samples as usize)
+                    .checked_mul(row.head.active_channels as usize)
+                    .and_then(|v| v.checked_mul(2));
+                if expected != Some(samples.len()) {
                     return Err(IoError::Inconsistent(format!(
-                        "acquisition {}: data len {} != expected {} \
+                        "acquisition {}: data len {} != expected {:?} \
                          ({} samples x {} channels x 2)",
                         start,
                         samples.len(),

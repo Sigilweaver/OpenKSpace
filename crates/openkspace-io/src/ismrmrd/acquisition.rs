@@ -124,18 +124,33 @@ pub struct Acquisition {
     pub header: AcquisitionHeader,
     /// Complex samples in `[channel, sample]` row-major order.
     /// Length = `active_channels * number_of_samples`.
+    ///
+    /// `channel`/`channel_mut`/`as_array_view`/`as_array_view_mut` all
+    /// index or reshape against `header.active_channels *
+    /// header.number_of_samples`, so this invariant must hold whenever
+    /// those are called. `from_raw_f32` upholds it when fed data whose
+    /// length matches the header (as `IsmrmrdFile::for_each` verifies
+    /// before constructing an `Acquisition` from file input); direct
+    /// struct construction with a mismatched header is a caller bug, not
+    /// something these accessors defend against.
     pub data: Vec<Complex32>,
 }
 
 impl Acquisition {
     /// Build from a flat `f32` vlen where pairs are (real, imag) and the
     /// storage order on disk is channel-major (all samples for ch 0, then ch 1, ...).
+    ///
+    /// Capacity is sized from `interleaved` (data already read off disk),
+    /// not from the header's `number_of_samples` / `active_channels`
+    /// fields -- those are file-controlled, and a caller that skips the
+    /// length cross-check (see `IsmrmrdFile::for_each`) must not be able
+    /// to force an allocation independent of how much data actually
+    /// arrived. This intentionally does not assert `interleaved.len() ==
+    /// number_of_samples * active_channels * 2`: that check belongs to
+    /// callers that can report a proper parse error, not a panic, on a
+    /// mismatched file.
     pub fn from_raw_f32(header: AcquisitionHeader, interleaved: &[f32]) -> Self {
-        let ns = header.number_of_samples as usize;
-        let nc = header.active_channels as usize;
-        debug_assert_eq!(interleaved.len(), ns * nc * 2);
-
-        let mut data = Vec::with_capacity(ns * nc);
+        let mut data = Vec::with_capacity(interleaved.len() / 2);
         for pair in interleaved.chunks_exact(2) {
             data.push(Complex32::new(pair[0], pair[1]));
         }
@@ -183,3 +198,28 @@ impl Acquisition {
 // Note: ISMRMRD's on-disk compound is 340 bytes (packed). Our Rust #[repr(C)]
 // layout includes natural alignment padding and is larger -- this is fine
 // because HDF5 converts compound types by field name, not by byte offset.
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod tests {
+    use super::*;
+
+    /// A header whose `number_of_samples` / `active_channels` claim far more
+    /// data than is actually provided must not drive the allocation in
+    /// `from_raw_f32` -- capacity should track the real (small) input, not
+    /// the file-controlled header fields.
+    #[test]
+    fn from_raw_f32_caps_capacity_to_actual_data_not_header() {
+        let mut header = AcquisitionHeader::default();
+        header.number_of_samples = u16::MAX;
+        header.active_channels = u16::MAX;
+
+        let interleaved = [1.0f32, 2.0, 3.0, 4.0]; // 2 complex samples
+        let acq = Acquisition::from_raw_f32(header, &interleaved);
+
+        assert_eq!(acq.data.len(), 2);
+        assert!(acq.data.capacity() < 1_000);
+        assert_eq!(acq.data[0], Complex32::new(1.0, 2.0));
+        assert_eq!(acq.data[1], Complex32::new(3.0, 4.0));
+    }
+}
