@@ -6,7 +6,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-- _No unreleased changes yet._
+### Security
+
+- `Acquisition::from_raw_f32` no longer sizes its allocation from the
+  file-controlled `number_of_samples` / `active_channels` header fields;
+  capacity now tracks the actual decoded data, so a crafted ISMRMRD
+  header can no longer force an oversized allocation independent of
+  what was actually read. `IsmrmrdFile::for_each`'s header/data length
+  cross-check now uses checked multiplication so a crafted header
+  cannot wrap the expected-length computation. Fixes #1. (@Nabejo)
 
 ## [0.3.0] - 2026-05-31
 
