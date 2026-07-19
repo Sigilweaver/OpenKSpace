@@ -86,7 +86,9 @@ impl IsmrmrdHeader {
                     // self-closing tag: no text to capture
                 }
                 Ok(Event::Text(t)) => {
-                    let text = t.unescape().map_err(|e| IoError::Xml(e.to_string()))?;
+                    let decoded = t.decode().map_err(|e| IoError::Xml(e.to_string()))?;
+                    let text = quick_xml::escape::unescape(&decoded)
+                        .map_err(|e| IoError::Xml(e.to_string()))?;
                     let text = text.trim();
                     if text.is_empty() {
                         continue;

@@ -6,6 +6,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- `quick-xml` bumped from `0.36` to `0.41`, clearing RUSTSEC-2026-0194
+  and RUSTSEC-2026-0195. The ISMRMRD header parser (`openkspace-io`)
+  moves from `BytesText::unescape()` to `BytesText::decode()` followed
+  by `quick_xml::escape::unescape()`. The stale `--ignore` flags for
+  those two advisories are removed from the audit workflow.
+
 ### Security
 
 - `Acquisition::from_raw_f32` no longer sizes its allocation from the
