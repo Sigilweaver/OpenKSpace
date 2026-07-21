@@ -28,7 +28,7 @@ categories = ["science", "command-line-utilities"]
 
 [workspace.dependencies]
 # Core numerics
-ndarray = { version = "0.15", features = ["rayon"] }
+ndarray = { version = "0.17", features = ["rayon"] }
 num-complex = "0.4"
 rustfft = "6.2"
 
