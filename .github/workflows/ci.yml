@@ -51,7 +51,7 @@ jobs:
           tar -xzf "$archive" -C "$RUNNER_TEMP"
           cmake -S "$RUNNER_TEMP/hdf5-1.14.6" -B "$RUNNER_TEMP/hdf5-build" \
             -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/hdf5-install" \
-            -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=OFF \
+            -DBUILD_SHARED_LIBS=ON -DHDF5_BUILD_WITH_INSTALL_NAME=ON -DBUILD_TESTING=OFF \
             -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_TOOLS=OFF
           cmake --build "$RUNNER_TEMP/hdf5-build" --parallel 3
           cmake --install "$RUNNER_TEMP/hdf5-build"
