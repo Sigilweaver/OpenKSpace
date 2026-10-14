@@ -42,8 +42,20 @@ jobs:
       - name: Install HDF5 (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install hdf5
-          echo "HDF5_DIR=$(brew --prefix hdf5)" >> "$GITHUB_ENV"
+          # hdf5-metno-sys 0.12.1 supports HDF5 1.x; Homebrew now installs 2.2.
+          # Build the upstream 1.14.6 release for this runner's architecture.
+          archive="$RUNNER_TEMP/hdf5-1.14.6.tar.gz"
+          curl --fail --location --retry 3 --output "$archive" \
+            https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6.tar.gz
+          echo "e4defbac30f50d64e1556374aa49e574417c9e72c6b1de7a4ff88c4b1bea6e9b  $archive" | shasum -a 256 -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP"
+          cmake -S "$RUNNER_TEMP/hdf5-1.14.6" -B "$RUNNER_TEMP/hdf5-build" \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/hdf5-install" \
+            -DBUILD_SHARED_LIBS=ON -DHDF5_BUILD_WITH_INSTALL_NAME=ON -DBUILD_TESTING=OFF \
+            -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_TOOLS=OFF
+          cmake --build "$RUNNER_TEMP/hdf5-build" --parallel 3
+          cmake --install "$RUNNER_TEMP/hdf5-build"
+          echo "HDF5_DIR=$RUNNER_TEMP/hdf5-install" >> "$GITHUB_ENV"
 
       - name: cargo fmt
         run: cargo fmt --all -- --check
