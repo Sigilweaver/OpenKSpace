@@ -86,7 +86,9 @@ impl IsmrmrdHeader {
                     // self-closing tag: no text to capture
                 }
                 Ok(Event::Text(t)) => {
-                    let decoded = t.decode().map_err(|e| IoError::Xml(e.to_string()))?;
+                    // ISMRMRD headers are XML 1.0. Input is already a str, so
+                    // only EOL normalization remains (infallible).
+                    let decoded = t.xml10_content();
                     let text = quick_xml::escape::unescape(&decoded)
                         .map_err(|e| IoError::Xml(e.to_string()))?;
                     let text = text.trim();
@@ -116,9 +118,8 @@ impl IsmrmrdHeader {
     }
 }
 
-fn local_name(bytes: &[u8]) -> String {
+fn local_name(s: &str) -> String {
     // quick-xml gives us `prefix:local` or just `local` -- we only care about local.
-    let s = std::str::from_utf8(bytes).unwrap_or("");
     match s.rfind(':') {
         Some(i) => s[i + 1..].to_string(),
         None => s.to_string(),
