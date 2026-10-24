@@ -36,7 +36,7 @@ rustfft = "6.2"
 hdf5-metno = { version = "0.14", features = ["blosc"] }
 
 # XML header
-quick-xml = { version = "0.41", features = ["serialize"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
 serde = { version = "1", features = ["derive"] }
 
 # Parallelism / IO
