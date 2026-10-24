@@ -345,9 +345,9 @@ checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
 
 [[package]]
 name = "hdf5-metno"
-version = "0.14.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f72d6ab4f6d6d79bd350c23f6fe17c99d86d8dd05c0e86f6291a366d47e1fece"
+checksum = "da648c8200335c8a8fdf270fc91807c949ddbef595dd2572a8a572a31977c3d5"
 dependencies = [
  "bitflags",
  "blosc-src",
@@ -375,9 +375,9 @@ dependencies = [
 
 [[package]]
 name = "hdf5-metno-sys"
-version = "0.12.1"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff52250062cf9ecd180ae4eccbb5e00b1f89ee44cb48046d1339c99f5fb6c169"
+checksum = "567a57ee34c38263f551f2cf02b95675def6b91d0e321c5e70f8c6d5ef9cee87"
 dependencies = [
  "libc",
  "libloading",
