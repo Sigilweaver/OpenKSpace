@@ -24,8 +24,8 @@ abstract: >
   (Walsh 2000) or ESPIRiT (Uecker 2014). All strategies support both 2D
   multi-slice and 3D Cartesian acquisitions.
 license: "Apache-2.0"
-date-released: "2026-05-03"
-version: "0.1.0"
+date-released: "2026-05-31"
+version: "0.3.0"
 keywords:
   - MRI
   - k-space
