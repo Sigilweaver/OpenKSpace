@@ -216,8 +216,7 @@ mod tests {
         let mut img_acq = mk_acq(0, 0, &img, nc);
         corr.apply(&mut img_acq);
 
-        for k in 0..ns {
-            let got = img_acq.data[k];
+        for (k, &got) in img_acq.data.iter().take(ns).enumerate() {
             let expected_re = (k + 1) as f32;
             assert!(
                 (got.re - expected_re).abs() < 1e-4 && got.im.abs() < 1e-4,

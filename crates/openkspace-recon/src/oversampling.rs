@@ -254,8 +254,7 @@ mod tests {
 
         // Output: only the centre sample should be non-zero.
         let expected = Complex32::new(10.0 * (recon as f32 / encoded as f32), 0.0);
-        for i in 0..recon {
-            let v = acq.data[i];
+        for (i, &v) in acq.data.iter().take(recon).enumerate() {
             if i == recon / 2 {
                 assert!(
                     (v - expected).norm() < 1e-4,
