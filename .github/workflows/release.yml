@@ -28,6 +28,28 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Check tag matches workspace version
+        if: github.ref_type == 'tag'
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          metadata="$(cargo metadata --no-deps --format-version 1)"
+          versions="$(printf '%s\n' "$metadata" \
+            | jq -r '.packages[] | select(.publish != []) | "\(.name) \(.version)"')"
+          echo "$versions"
+          if [ -z "$versions" ]; then
+            echo "::error::no publishable crates found in the workspace"
+            exit 1
+          fi
+          mismatch="$(echo "$versions" | awk -v v="$tag_version" '$2 != v')"
+          if [ -n "$mismatch" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the workspace version:"
+            echo "$mismatch"
+            exit 1
+          fi
+
+      - name: Dry-run publish (stale internal pins stop the release here)
+        run: cargo publish --dry-run --workspace
+
       - name: Publish openkspace-io
         run: cargo publish -p openkspace-io --token "$CARGO_REGISTRY_TOKEN"
         env:
