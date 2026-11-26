@@ -5,7 +5,7 @@
 [![crates.io](https://img.shields.io/crates/v/openkspace-cli.svg)](https://crates.io/crates/openkspace-cli)
 [![docs.rs](https://img.shields.io/docsrs/openkspace-io)](https://docs.rs/openkspace-io)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Rust MSRV](https://img.shields.io/badge/rust-1.87%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust MSRV](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![Docs](https://img.shields.io/badge/docs-sigilweaver.app-blue.svg)](https://sigilweaver.app/openkspace/docs/)
 
 A Rust library and CLI for Cartesian MRI k-space reconstruction from
@@ -111,7 +111,7 @@ openkspace recon data.h5 --strategy cs --cs-iters 120 --cs-lambda 0.01
 
 ## Building
 
-Requires Rust 1.75+ and HDF5 system libraries.
+Requires Rust 1.88+ and HDF5 system libraries.
 
 ```sh
 cargo build --release

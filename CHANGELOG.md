@@ -6,13 +6,51 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-26
+
+First crates.io release since 0.2.0. Version 0.3.0 was tagged and has a
+GitHub release, but its crates.io publish failed (the release commit
+bumped the workspace version while the internal crate pins still said
+0.2.0), so 0.3.0 was never published. Everything listed under 0.3.0
+below ships here too, together with the changes since.
+
+### Breaking
+
+- **`ndarray` 0.15 to 0.17.** `ndarray` types appear in the public API of
+  `openkspace-io` (`read_kspace`, `read_reconstruction_rss`,
+  `Acquisition::as_array_view`, ...) and `openkspace-recon` (FFT, shift,
+  coil-combine, GRAPPA, wavelet and partial-Fourier functions, and
+  `ImageVolume`). Downstream code must use `ndarray` 0.17.
+- **`hdf5-metno` 0.9 to 0.15** (via 0.12 in 0.3.0). `IoError::Hdf5` wraps
+  `hdf5_metno::Error`, so code that matches on or names that type needs
+  `hdf5-metno` 0.15.
+- **Minimum supported Rust version raised from 1.87 to 1.88**, which the
+  locked `image` 0.25.10 (used by `openkspace-cli`) already requires.
+
 ### Changed
 
-- `quick-xml` bumped from `0.36` to `0.41`, clearing RUSTSEC-2026-0194
+- `quick-xml` bumped from `0.36` to `0.42`, clearing RUSTSEC-2026-0194
   and RUSTSEC-2026-0195. The ISMRMRD header parser (`openkspace-io`)
-  moves from `BytesText::unescape()` to `BytesText::decode()` followed
-  by `quick_xml::escape::unescape()`. The stale `--ignore` flags for
-  those two advisories are removed from the audit workflow.
+  moves from `BytesText::unescape()` to `BytesText::xml10_content()`
+  followed by `quick_xml::escape::unescape()`. The stale `--ignore`
+  flags for those two advisories are removed from the audit workflow.
+- `thiserror` 1 to 2, `indicatif` 0.17 to 0.18, plus routine patch
+  updates of `clap`, `serde`, `serde_json` and `anyhow`. None of these
+  change the public API.
+- `Acquisition::from_raw_f32` no longer `debug_assert`s that the input
+  length matches the header; see Security below.
+- Em dashes, en dashes and box-drawing characters in source comments
+  and `CREDITS.md` replaced with ASCII.
+
+### Added
+
+- `LICENSE` (Apache-2.0) is included in each published crate package
+  as a copy in each crate directory; the 0.2.0 packages did not carry it.
+- `CITATION.cff` Zenodo concept DOI, and a CI check that its version
+  and release date match the crate release.
+- `cargo-audit` workflow, Dependabot configuration, and a CI
+  concurrency group.
+- Regression test for the `Acquisition::from_raw_f32` allocation bound.
 
 ### Security
 
@@ -24,7 +62,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   cross-check now uses checked multiplication so a crafted header
   cannot wrap the expected-length computation. Fixes #1. (@Nabejo)
 
+### Fixed
+
+- Internal crate version pins track the workspace version, so
+  `cargo publish` resolves the matching `openkspace-io` /
+  `openkspace-recon` release (the cause of the failed 0.3.0 publish).
+- CI: macOS builds provision HDF5 1.14.6 and export its install path so
+  `hdf5-metno-sys` can find it.
+
 ## [0.3.0] - 2026-05-31
+
+Tagged and released on GitHub only; never published to crates.io. These
+changes first reach crates.io in 0.4.0.
 
 ### Added
 
@@ -37,9 +86,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `openkspace-cli` no longer calls `unwrap()`; the static
   `ProgressStyle::template()` is now `expect("static progress
   template")`, and the BTreeSet next-value lookup uses
-  `copied().unwrap_or(0)`. Library crates carry
-  `#![cfg_attr(not(test), warn(clippy::unwrap_used,
-  clippy::expect_used))]` so future regressions are linted.
+  `copied().unwrap_or(0)`.
 - HDF5 dependency bumped from `hdf5-metno 0.9` to `0.12`
   (`hdf5-metno-sys 0.11.3` supports HDF5 2.x).
 - CI: `HDF5_DIR` exported on macOS so `hdf5-metno-sys` can find
