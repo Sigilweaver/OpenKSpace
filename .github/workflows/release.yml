@@ -32,7 +32,8 @@ jobs:
         if: github.ref_type == 'tag'
         run: |
           tag_version="${GITHUB_REF_NAME#v}"
-          versions="$(cargo metadata --no-deps --format-version 1 \
+          metadata="$(cargo metadata --no-deps --format-version 1)"
+          versions="$(printf '%s\n' "$metadata" \
             | jq -r '.packages[] | select(.publish != []) | "\(.name) \(.version)"')"
           echo "$versions"
           if [ -z "$versions" ]; then
