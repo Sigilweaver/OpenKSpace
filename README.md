@@ -111,7 +111,7 @@ openkspace recon data.h5 --strategy cs --cs-iters 120 --cs-lambda 0.01
 
 ## Building
 
-Requires Rust 1.75+ and HDF5 system libraries.
+Requires Rust 1.87+ and HDF5 system libraries.
 
 ```sh
 cargo build --release

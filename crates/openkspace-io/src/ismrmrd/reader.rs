@@ -113,8 +113,10 @@ impl IsmrmrdFile {
                     .checked_mul(row.head.active_channels as usize)
                     .and_then(|v| v.checked_mul(2));
                 if expected != Some(samples.len()) {
+                    let expected =
+                        expected.map_or_else(|| "overflow".to_string(), |v| v.to_string());
                     return Err(IoError::Inconsistent(format!(
-                        "acquisition {}: data len {} != expected {:?} \
+                        "acquisition {}: data len {} != expected {} \
                          ({} samples x {} channels x 2)",
                         start,
                         samples.len(),

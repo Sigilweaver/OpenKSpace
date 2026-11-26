@@ -37,7 +37,8 @@ below ships here too, together with the changes since.
   change the public API.
 - `Acquisition::from_raw_f32` no longer `debug_assert`s that the input
   length matches the header; see Security below.
-- Source comments and docs use ASCII only.
+- Em dashes, en dashes and box-drawing characters in source comments
+  and `CREDITS.md` replaced with ASCII.
 
 ### Added
 
@@ -83,9 +84,7 @@ changes first reach crates.io in 0.4.0.
   `openkspace-cli` no longer calls `unwrap()`; the static
   `ProgressStyle::template()` is now `expect("static progress
   template")`, and the BTreeSet next-value lookup uses
-  `copied().unwrap_or(0)`. Library crates carry
-  `#![cfg_attr(not(test), warn(clippy::unwrap_used,
-  clippy::expect_used))]` so future regressions are linted.
+  `copied().unwrap_or(0)`.
 - HDF5 dependency bumped from `hdf5-metno 0.9` to `0.12`
   (`hdf5-metno-sys 0.11.3` supports HDF5 2.x).
 - CI: `HDF5_DIR` exported on macOS so `hdf5-metno-sys` can find
