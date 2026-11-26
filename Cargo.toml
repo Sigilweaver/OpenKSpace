@@ -7,7 +7,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["Nathan Riley <git@nathanriley.com>"]
 license = "Apache-2.0"
@@ -53,8 +53,8 @@ indicatif = "0.18"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 # Workspace-internal crates
-openkspace-io = { path = "crates/openkspace-io", version = "0.3.0" }
-openkspace-recon = { path = "crates/openkspace-recon", version = "0.3.0" }
+openkspace-io = { path = "crates/openkspace-io", version = "0.4.0" }
+openkspace-recon = { path = "crates/openkspace-recon", version = "0.4.0" }
 
 [profile.release]
 opt-level = 3

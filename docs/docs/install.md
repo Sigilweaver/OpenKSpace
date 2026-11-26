@@ -20,8 +20,8 @@ Add the appropriate crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-openkspace-io    = "0.2"   # ISMRMRD HDF5 reader
-openkspace-recon = "0.2"   # calibration + recon strategies
+openkspace-io    = "0.4"   # ISMRMRD HDF5 reader
+openkspace-recon = "0.4"   # calibration + recon strategies
 ```
 
 MSRV: Rust 1.87.
