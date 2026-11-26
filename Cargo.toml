@@ -15,7 +15,7 @@ repository = "https://github.com/Sigilweaver/OpenKSpace"
 homepage = "https://sigilweaver.app/openkspace/"
 documentation = "https://sigilweaver.app/openkspace/docs/"
 readme = "README.md"
-rust-version = "1.87"
+rust-version = "1.88"
 keywords = ["mri", "ismrmrd", "k-space", "reconstruction", "imaging"]
 categories = ["science", "command-line-utilities"]
 

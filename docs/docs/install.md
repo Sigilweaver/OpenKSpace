@@ -24,7 +24,7 @@ openkspace-io    = "0.4"   # ISMRMRD HDF5 reader
 openkspace-recon = "0.4"   # calibration + recon strategies
 ```
 
-MSRV: Rust 1.87.
+MSRV: Rust 1.88.
 
 ## System dependencies
 

@@ -24,6 +24,8 @@ below ships here too, together with the changes since.
 - **`hdf5-metno` 0.9 to 0.15** (via 0.12 in 0.3.0). `IoError::Hdf5` wraps
   `hdf5_metno::Error`, so code that matches on or names that type needs
   `hdf5-metno` 0.15.
+- **Minimum supported Rust version raised from 1.87 to 1.88**, which the
+  locked `image` 0.25.10 (used by `openkspace-cli`) already requires.
 
 ### Changed
 
