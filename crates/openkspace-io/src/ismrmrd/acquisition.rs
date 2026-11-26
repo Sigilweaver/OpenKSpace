@@ -151,8 +151,9 @@ impl Acquisition {
     /// mismatched file.
     pub fn from_raw_f32(header: AcquisitionHeader, interleaved: &[f32]) -> Self {
         let mut data = Vec::with_capacity(interleaved.len() / 2);
-        for pair in interleaved.chunks_exact(2) {
-            data.push(Complex32::new(pair[0], pair[1]));
+        let (pairs, _) = interleaved.as_chunks::<2>();
+        for &[re, im] in pairs {
+            data.push(Complex32::new(re, im));
         }
         Acquisition { header, data }
     }
