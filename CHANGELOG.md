@@ -6,6 +6,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- `CITATION.cff` identifies the Zenodo concept DOI (10.5281/zenodo.20470592),
+  which resolves to the latest archived version, instead of the DOI of the
+  0.3.0 version record.
+
 ## [0.4.0] - 2026-11-26
 
 First crates.io release since 0.2.0. Version 0.3.0 was tagged and has a
